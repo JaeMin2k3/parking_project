@@ -9,6 +9,9 @@ app.use(bodyParser.json());
 require('dotenv').config(); 
 const port = process.env.PORT; 
 
+//import model
+
+const models = require('./models/index');
 
 
 //import router
@@ -18,12 +21,18 @@ const routerUser = require('./routers/user');
 
 
 
-app.use('admin',routerAdmin);
-app.use('user', routerUser);
+
+// app.use('admin',routerAdmin);
+// app.use('user', routerUser);
 
 
-sequelize.sync().then(result => {
-  console.log(result);
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(err.status || 500).json({ message: err.message || 'Internal error' });
+});
+
+sequelize.sync({force: true, logging: console.log}).then(result => {
+  console.log("ket quả là" + result);
   app.listen(port);
 }).catch(err => {
   console.log(err);
