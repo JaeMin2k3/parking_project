@@ -9,13 +9,6 @@ module.exports = (sequelize) => {
     unit_price: { type: DataTypes.DECIMAL(12,2), allowNull: false },
   }, {
     tableName: 'parking_fee',
-    indexes: [
-      {
-        name: 'idx_fee_plan', // <-- tên ngắn, tránh >64 ký tự
-        using: 'BTREE',
-        fields: ['plan_type','vehicle_type'],
-      },
-    ],
   });
 
   return ParkingRate;

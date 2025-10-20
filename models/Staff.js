@@ -8,7 +8,6 @@ module.exports = (sequelize) => {
     status: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   }, {
     tableName: 'staff',
-    indexes: [{ unique: true, fields: ['username'] }]
   });
 
   return Staff;

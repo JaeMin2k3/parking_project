@@ -7,7 +7,6 @@ module.exports = (sequelize) => {
     role: { type: DataTypes.STRING(255), defaultValue: 'ADMIN' },
   },{
     tableName: 'admin',
-    indexes: [{ unique: true, fields: ['username'] }]
   })
   return Admin;
 }

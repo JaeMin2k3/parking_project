@@ -12,11 +12,6 @@ module.exports = (sequelize) => {
     status: { type: DataTypes.ENUM('PENDING_PAYMENT','CONFIRMED','CANCELLED','EXPIRED'), allowNull: false, default: 'PENDING_PAYMENT' },
   }, {
     tableName: 'reservations',
-    indexes: [
-      { fields: ['spot_id','start_time','end_time'] },
-      { fields: ['plate','start_time','end_time'] },
-      { fields: ['status'] }
-    ],
     validate: {
       endAfterStart() {
         if (this.start_time && this.end_time && this.end_time <= this.start_time) {

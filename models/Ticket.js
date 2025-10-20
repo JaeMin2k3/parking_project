@@ -12,12 +12,6 @@ module.exports = (sequelize) => {
     start_time: { type: DataTypes.DATE, allowNull: true },
   }, {
     tableName: 'tickets',
-    indexes: [
-      { fields: ['plate'] },
-      { fields: ['booked_start'] },
-      { fields: ['booked_end'] },
-      { fields: ['start_time'] }
-    ]
   });
 
   return Ticket;

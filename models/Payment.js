@@ -7,10 +7,7 @@ module.exports = (sequelize) => {
     currency: { type: DataTypes.CHAR(3), allowNull: false, defaultValue: 'VND' },
     status: { type: DataTypes.ENUM('SUCCEEDED','FAILED','PENDING'), defaultValue: 'PENDING' },
   }, {
-    tableName: 'payments',
-    indexes: [
-      { fields: ['status'] }
-    ]
+    tableName: 'payments'
   });
 
   // Enforce XOR: chỉ 1 trong 2 trường có giá trị
