@@ -46,6 +46,7 @@ exports.postLogin = async (req, res, next) => {
 
 exports.postSign = async (req, res, next) => {
   const {username, password} = req.body;
+  console.log(username + password)
   const user = await model.Customer.findOne({
     where: {username},
     raw: true

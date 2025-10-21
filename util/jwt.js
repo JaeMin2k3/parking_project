@@ -1,5 +1,4 @@
 
-const model = require('../models/index')
 require('dotenv').config()
 function TokenVerify(req, res, next) {
     const token = req.headers['authorization']

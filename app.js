@@ -31,7 +31,7 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ message: err.message || 'Internal error' });
 });
 
-sequelize.sync().then(result => {
+sequelize.sync({force: true}).then(result => {
   app.listen(port);
 }).catch(err => {
   console.log(err);
