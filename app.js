@@ -24,6 +24,7 @@ const routerUser = require('./routers/user');
 
 // app.use('admin',routerAdmin);
 app.use('/user', routerUser);
+app.use('/admin', routerAdmin);
 
 
 app.use((err, req, res, next) => {

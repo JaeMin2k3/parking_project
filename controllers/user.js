@@ -15,8 +15,10 @@ exports.postLogin = async (req, res, next) => {
       raw: true
     })
     console.log(user)
+    //check username
     if(user){
     const ok = await bcrypt.compare(password, user.password_hash);
+    // check mặt khẩu
     if(ok){
       jwt.sign({_id: user.username}, process.env.SECRET_KEY, {expiresIn: '24h'},
          (err, token) => {
@@ -32,10 +34,10 @@ exports.postLogin = async (req, res, next) => {
          }
       )
     }else{
-      res.status(404).send('User nod found');
+      res.status(401).send('mật khẩu không đúng');
     }
   }else {
-    res.status(404).json("message: account not found")
+    res.status(401).json("tài khoản không tồn tại")
   }
     
   }catch(err){
