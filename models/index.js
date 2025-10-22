@@ -6,7 +6,7 @@ const ParkingFee   = require('./ParkingRate')(sequelize);
 const Reservation  = require('./Reservation')(sequelize);
 const Ticket       = require('./Ticket')(sequelize);
 const Payment      = require('./Payment')(sequelize);
-const Admin        = require('./Admin')(sequelize);
+
 const Customer     = require('./Customer')(sequelize);
 const Bill         = require('./Bill')(sequelize);
 
@@ -51,14 +51,12 @@ Ticket.hasOne(Bill, { foreignKey: 'ticketId', onDelete: 'CASCADE', onUpdate: 'CA
 Bill.belongsTo(Ticket, { foreignKey: 'ticketId' });
 
 module.exports = {
-  sequelize,
   Staff,
-  Admin,
   Customer,
   Spot,
   ParkingFee,
   Reservation,
   Ticket,
   Payment,
-  Bill, // đừng quên export Bill
+  Bill
 };
