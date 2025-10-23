@@ -1,16 +1,12 @@
 const express = require('express');
 const router  = express.Router();
 const controllerAdmin = require('../controllers/admin')
-
+const TokenVerify = require('../util/jwt')
+const validateAdmin = require('../util/validateAdmin')
 router.post('/login', controllerAdmin.postLogin);
-router.post('/newStaff', controllerAdmin.postNewStaff)
-router.get('/staffs', controllerAdmin.getAllStaffs);
-// router.post('/staffs/:staffId', controllerAdmin.postDeleteStaff);
-
-// router.get('/spots', controllerAdmin.getAllSpots );
-// router.post('/newSpot/:spotId', controllerAdmin.postInactiveSpot);
-
-router.post('/updateSpot', controllerAdmin.postUpdateSpot);
+router.post('/newStaff', validateAdmin, controllerAdmin.postNewStaff)
+router.get('/staffs', validateAdmin, controllerAdmin.getAllStaffs);
+router.post('/updateSpot',validateAdmin, controllerAdmin.postUpdateSpot);
 
 // router.get('/dashboard', controllerAdmin.getDashBoard );
 
