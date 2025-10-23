@@ -80,6 +80,67 @@ exports.postNewStaff = async (req,res,next) => {
   })
 } 
 
+// admin/spots
+exports.getAllSpots = async (req, res) => {
+  try {
+    const spots = await model.Spot.findAll({
+      include: [
+        {
+          model: model.ParkingRate,
+          attributes: ['plan_type', 'unit_price', 'currency', 'vehicle_type']
+        }
+      ],
+      order: [['spot_number', 'ASC']]
+    });
+
+    res.status(200).json({
+      message: "success",
+      count: spots.length,
+      spots: spots
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Lỗi server", error: err.message });
+  }
+};
+
+// admin/newSpot
+exports.postNewSpot = async (req, res) => {
+  const { spot_number, area, vehicle_type, parkingFeeId } = req.body;
+
+  if (!spot_number || !vehicle_type) {
+    return res.status(400).json({ message: "Số chỗ và loại xe là bắt buộc" });
+  }
+
+  try {
+    // Check if spot number already exists
+    const existing = await model.Spot.findOne({
+      where: { spot_number },
+      raw: true
+    });
+
+    if (existing) {
+      return res.status(409).json({ message: "Số chỗ đã tồn tại" });
+    }
+
+    const spot = await model.Spot.create({
+      spot_number,
+      area: area || null,
+      vehicle_type,
+      status: 'AVAILABLE',
+      parkingFeeId: parkingFeeId || null
+    });
+
+    res.status(201).json({
+      message: "Tạo chỗ đỗ thành công",
+      spot: spot
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Lỗi server", error: err.message });
+  }
+};
+
 // admin/updateSpot
 exports.postUpdateSpot = async (req,res,next) => {
   const {username, password, status} = req.body;
@@ -105,3 +166,28 @@ exports.postUpdateSpot = async (req,res,next) => {
     })
   }
   }
+
+// admin/deleteSpot
+exports.deleteSpot = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const spot = await model.Spot.findByPk(id);
+
+    if (!spot) {
+      return res.status(404).json({ message: "Chỗ đỗ không tồn tại" });
+    }
+
+    // Check if spot is occupied
+    if (spot.status === 'OCCUPIED') {
+      return res.status(400).json({ message: "Không thể xóa chỗ đang có xe" });
+    }
+
+    await spot.destroy();
+
+    res.status(200).json({ message: "Xóa chỗ đỗ thành công" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Lỗi server", error: err.message });
+  }
+};
