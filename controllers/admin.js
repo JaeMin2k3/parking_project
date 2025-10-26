@@ -1,7 +1,6 @@
 const model = require('../models/index');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const TokenVerify = require('../util/jwt')
 require('dotenv').config();
 // admin/login
 exports.postLogin = async(req, res, next) => {
@@ -192,3 +191,16 @@ exports.deleteSpot = async (req, res) => {
     res.status(500).json({ message: "Lỗi server", error: err.message });
   }
 };
+
+exports.getRole = async(req, res, next) => {
+  const token = req.headers['authorization'];
+  if(token){
+    const check = await jwt.verify(token, process.env.SECRET_KEY);
+    if(check.role === 'admin') res.status(200).json({
+      message: "hello admin"
+    })
+    else res.status(404).json({
+      message: "bạn không phải là admin"
+    })
+  }
+}
