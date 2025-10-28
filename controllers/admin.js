@@ -86,11 +86,11 @@ exports.getAllSpots = async (req, res) => {
     const spots = await model.Spot.findAll({
       include: [
         {
-          model: model.ParkingRate,
-          attributes: ['plan_type', 'unit_price', 'currency', 'vehicle_type']
+          model: model.ParkingFee,
+          attributes: ['id', 'spot_type', 'is_active']
         }
       ],
-      order: [['spot_number', 'ASC']]
+      order: [['id', 'ASC']]
     });
 
     res.status(200).json({
@@ -106,29 +106,20 @@ exports.getAllSpots = async (req, res) => {
 
 // admin/newSpot
 exports.postNewSpot = async (req, res) => {
-  const { spot_number, area, vehicle_type, parkingFeeId } = req.body;
+  const { spot_type } = req.body;
 
-  if (!spot_number || !vehicle_type) {
-    return res.status(400).json({ message: "Số chỗ và loại xe là bắt buộc" });
+  if (!spot_type) {
+    return res.status(400).json({ message: "Loại chỗ đỗ là bắt buộc" });
+  }
+
+  if (!['CAR', 'MOTORBIKE'].includes(spot_type)) {
+    return res.status(400).json({ message: "Loại chỗ đỗ phải là CAR hoặc MOTORBIKE" });
   }
 
   try {
-    // Check if spot number already exists
-    const existing = await model.Spot.findOne({
-      where: { spot_number },
-      raw: true
-    });
-
-    if (existing) {
-      return res.status(409).json({ message: "Số chỗ đã tồn tại" });
-    }
-
     const spot = await model.Spot.create({
-      spot_number,
-      area: area || null,
-      vehicle_type,
-      status: 'AVAILABLE',
-      parkingFeeId: parkingFeeId || null
+      spot_type,
+      is_active: true
     });
 
     res.status(201).json({
@@ -141,32 +132,6 @@ exports.postNewSpot = async (req, res) => {
   }
 };
 
-// admin/updateSpot
-exports.postUpdateSpot = async (req,res,next) => {
-  const {username, password, status} = req.body;
-  console.log(username + " " + password + " "+status)
-  const pw_hash = bcrypt.hashSync(password, 10);
-  console.log(pw_hash);
-  const check = await model.Staff.update(
-    {
-      password_hash: pw_hash,
-      status: status
-    },
-    {
-      where: {username},
-    }
-  )
-  console.log(check)
-  if(check) res.status(200).json({
-    message: "cập nhật thành công"
-  })
-  else{
-    res.status(500).json({
-      message: "cập nhật thất bại, vui lòng thử lại sau"
-    })
-  }
-  }
-
 // admin/deleteSpot
 exports.deleteSpot = async (req, res) => {
   const { id } = req.params;
@@ -178,9 +143,9 @@ exports.deleteSpot = async (req, res) => {
       return res.status(404).json({ message: "Chỗ đỗ không tồn tại" });
     }
 
-    // Check if spot is occupied
-    if (spot.status === 'OCCUPIED') {
-      return res.status(400).json({ message: "Không thể xóa chỗ đang có xe" });
+    // Check if spot is occupied (using is_active instead of status)
+    if (!spot.is_active) {
+      return res.status(400).json({ message: "Chỗ đỗ đã bị vô hiệu hóa" });
     }
 
     await spot.destroy();
