@@ -6,7 +6,7 @@ require('dotenv').config();
 exports.postLogin = async(req, res, next) => {
   const {username, password} = req.body;  
   const admin = await model.Staff.findOne({
-    where: {username},
+    where: {username, role: "admin"},
     attribute: ["username", "password_hash", "role"],
     raw: true
   })

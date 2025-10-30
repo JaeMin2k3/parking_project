@@ -9,20 +9,20 @@ const Payment      = require('./Payment')(sequelize);
 
 const Customer     = require('./Customer')(sequelize);
 const Bill         = require('./Bill')(sequelize);
-
+const UserVerify   = require('./UserVerify')(sequelize);
 // Staff — Ticket
 Staff.hasMany(Ticket, { foreignKey: 'staffUsername', sourceKey: 'username' });
 Ticket.belongsTo(Staff, { foreignKey: 'staffUsername', targetKey: 'username' });
 
 // Customer — Reservation
 Customer.hasMany(Reservation, {
-  foreignKey: 'customerUsername',
+  foreignKey: 'user_id',
   sourceKey: 'username',
   onDelete: 'CASCADE',
   onUpdate: 'CASCADE',
 });
 Reservation.belongsTo(Customer, {
-  foreignKey: 'customerUsername',
+  foreignKey: 'user_id',
   targetKey: 'username',
 });
 
@@ -50,6 +50,10 @@ Spot.belongsTo(ParkingFee, { foreignKey: 'parkingFeeId' });
 Ticket.hasOne(Bill, { foreignKey: 'ticketId', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
 Bill.belongsTo(Ticket, { foreignKey: 'ticketId' });
 
+// Customer - UserVerify
+Customer.hasMany(UserVerify, {foreignKey: 'gmailCustomer', onDelete: 'CASCADE', sourceKey: 'gmail'});
+UserVerify.belongsTo(Customer, {foreignKey: 'gmailCustomer', targetKey: 'gmail'})
+
 module.exports = {
   Staff,
   Customer,
@@ -58,5 +62,6 @@ module.exports = {
   Reservation,
   Ticket,
   Payment,
-  Bill
+  Bill,
+  UserVerify
 };

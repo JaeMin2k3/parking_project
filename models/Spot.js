@@ -12,8 +12,6 @@ module.exports = (sequelize) => {
     is_active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   }, {
     tableName: 'spots',
-    charset: 'utf8mb4',
-    collate: 'utf8mb4_bin', // MySQL: phân biệt hoa/thường cho khóa chính
     hooks: {
       beforeValidate: (spot) => {
         if (spot.id) spot.id = spot.id.trim().toUpperCase(); // luôn chuẩn hóa về HOA
