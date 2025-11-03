@@ -5,7 +5,7 @@ const Reservation = require('../models/Reservation');
 const { now } = require('sequelize/lib/utils');
 const Staff = require('../models/Staff')
 require('dotenv').config();
-
+const sequelize = require('../util/database')
 // staff/login
 exports.postLogin = async (req,res,next) => {
   const {username, password} = req.body;
@@ -72,6 +72,7 @@ exports.postCreateTicket = async(req, res, next) => {
 
 // staff/bill
 exports.postCreateBill = async (req, res, next) => {
+  const transaction = await sequelize.transaction(); 
   try{
   const idTicket = req.body.id;
   const ticket = await model.Ticket.findOne({where: {id: idTicket}});
@@ -93,12 +94,23 @@ exports.postCreateBill = async (req, res, next) => {
 
   let payed_money = 0;
   console.log(payed_money);
+  if(ticket.status){
   const bill = await ticket.createBill({
     payed_money: payed_money,
     totalPrice: totalPrice
-  })
-  if(bill) res.status(200).json({message:"success"});
+  },{transaction: transaction});
+  // cập nhập lại trạng thái ticket
+  await ticket.update({ status: 0 }, { transaction });
+
+  await transaction.commit(); 
+
+  if(bill) return res.status(200).json({message:"success"});
   else console.log("không thể tạo bill")
+  }else {
+    res.status(409).json({
+      message: "bill đã được tạo"
+    })
+  }
 }catch(err){
   console.log(err);
   throw(err);
