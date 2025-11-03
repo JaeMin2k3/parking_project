@@ -6,7 +6,7 @@ module.exports = (sequelize) => {
     date: {type: DataTypes.DATEONLY, allowNull: false},
     startBlock: {type: DataTypes.INTEGER.UNSIGNED, allowNull: false},
     blockCount: {type: DataTypes.INTEGER.UNSIGNED, allowNull: false}, 
-    status: { type: DataTypes.ENUM('HOLD','CONFIRMED','CANCELLED'), allowNull: false, defaultValue: 'CONFIRMED' },
+    status: { type: DataTypes.ENUM('PENDING','CONFIRMED','CANCELLED'), allowNull: false, defaultValue: 'PENDING' },
   }
   , {
   tableName: 'reservations',

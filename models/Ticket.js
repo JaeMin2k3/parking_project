@@ -4,13 +4,13 @@ module.exports = (sequelize) => {
   const Ticket = sequelize.define('Ticket', {
     id: { type: DataTypes.BIGINT.UNSIGNED, autoIncrement: true, primaryKey: true },
     spot_id: { type: DataTypes.BIGINT.UNSIGNED, allowNull: false },
-    reservation_id: { type: DataTypes.BIGINT.UNSIGNED, allowNull: true, unique: true }, // 1 reservation -> tối đa 1 ticket
+    reservation_id: { type: DataTypes.BIGINT.UNSIGNED, allowNull: true, unique: true }, 
     plate: { type: DataTypes.STRING(20), allowNull: false },
-    vehile_type: { type: DataTypes.ENUM('CAR','MOTORBIKE'), allowNull: false },
+    vehicle_type: { type: DataTypes.ENUM('CAR','MOTORBIKE'), allowNull: false },
     booked_start: { type: DataTypes.DATE, allowNull: true },
     booked_end: { type: DataTypes.DATE, allowNull: true },
-    start_time: { type: DataTypes.DATE, allowNull: true },
-    status: {type: DataTypes.BOOLEAN, allowNull: false, default: false}
+    start_time: { type: DataTypes.DATE, allowNull: false },
+    status: {type: DataTypes.BOOLEAN, allowNull: false, default: true}
   }, {
     tableName: 'tickets',
   });
