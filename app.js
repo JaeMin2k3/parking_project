@@ -4,7 +4,7 @@ const bodyParser = require('body-parser');
 const sequelize = require('./util/database');
 
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: false })); // 👈 cần cho form POST của bridge
+app.use(bodyParser.urlencoded({ extended: false })); 
 
 //import .env
 require('dotenv').config(); 
@@ -33,7 +33,7 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ message: err.message || 'Internal error' });
 });
 
-sequelize.sync({force: true}).then(result => {
+sequelize.sync().then(result => {
   app.listen(port);
 }).catch(err => {
   console.log(err);

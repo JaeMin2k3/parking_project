@@ -7,7 +7,7 @@ module.exports = (sequelize) => {
     currency: { type: DataTypes.CHAR(3), allowNull: false, defaultValue: 'VND' },
     unit_price: { type: DataTypes.DECIMAL(12,2), allowNull: false },
   }, {
-    tableName: 'parking_fee',
+    tableName: 'parking_rate',
   });
 
   return ParkingRate;

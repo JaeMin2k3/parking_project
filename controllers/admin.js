@@ -15,7 +15,7 @@ exports.postLogin = async(req, res, next) => {
     console.log(admin);
     const oke =  await bcrypt.compare(password, admin.password_hash);
     if(oke){
-      jwt.sign({_id: admin.username,  role: admin.role}, process.env.SECRET_KEY, {expiresIn: "24h"},
+      jwt.sign({id: admin.username}, process.env.SECRET_KEY, {expiresIn: "24h"},
         (err, token) => {
           if(err){
             console.log(err);
@@ -80,82 +80,7 @@ exports.postNewStaff = async (req,res,next) => {
   })
 } 
 
-// admin/spots
-exports.getAllSpots = async (req, res) => {
-  try {
-    const spots = await model.Spot.findAll({
-      include: [
-        {
-          model: model.ParkingFee,
-          attributes: ['id', 'spot_type', 'is_active']
-        }
-      ],
-      order: [['id', 'ASC']]
-    });
 
-    res.status(200).json({
-      message: "success",
-      count: spots.length,
-      spots: spots
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Lỗi server", error: err.message });
-  }
-};
-
-// admin/newSpot
-exports.postNewSpot = async (req, res) => {
-  const { spot_type } = req.body;
-
-  if (!spot_type) {
-    return res.status(400).json({ message: "Loại chỗ đỗ là bắt buộc" });
-  }
-
-  if (!['CAR', 'MOTORBIKE'].includes(spot_type)) {
-    return res.status(400).json({ message: "Loại chỗ đỗ phải là CAR hoặc MOTORBIKE" });
-  }
-
-  try {
-    const spot = await model.Spot.create({
-      spot_type,
-      is_active: true
-    });
-
-    res.status(201).json({
-      message: "Tạo chỗ đỗ thành công",
-      spot: spot
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Lỗi server", error: err.message });
-  }
-};
-
-// admin/deleteSpot
-exports.deleteSpot = async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const spot = await model.Spot.findByPk(id);
-
-    if (!spot) {
-      return res.status(404).json({ message: "Chỗ đỗ không tồn tại" });
-    }
-
-    // Check if spot is occupied (using is_active instead of status)
-    if (!spot.is_active) {
-      return res.status(400).json({ message: "Chỗ đỗ đã bị vô hiệu hóa" });
-    }
-
-    await spot.destroy();
-
-    res.status(200).json({ message: "Xóa chỗ đỗ thành công" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Lỗi server", error: err.message });
-  }
-};
 
 exports.getRole = async(req, res, next) => {
   const token = req.headers['authorization'];

@@ -11,8 +11,8 @@ const Bill = require('./Bill')(sequelize);
 const UserVerify   = require('./UserVerify')(sequelize);
 const ReservationBlock = require('./ReservationBlock')(sequelize)
 // Staff — Ticket
-Staff.hasMany(Ticket, { foreignKey: 'staffUsername', sourceKey: 'username' });
-Ticket.belongsTo(Staff, { foreignKey: 'staffUsername', targetKey: 'username' });
+Staff.hasMany(Ticket, { foreignKey: 'staffUsername', sourceKey: 'username', onDelete: "set null" });
+Ticket.belongsTo(Staff, { foreignKey: 'staffUsername', targetKey: 'username', onDelete: "Set null" });
 
 // Customer — Reservation
 Customer.hasMany(Reservation, {
@@ -36,7 +36,7 @@ Payment.belongsTo(Reservation,{ foreignKey: 'reservationId' });
 
 // Reservation — Ticket (1–1)
 Reservation.hasOne(Ticket, { foreignKey: 'reservationId', onDelete: 'SET NULL', onUpdate: 'CASCADE' });
-Ticket.belongsTo(Reservation, { foreignKey: 'reservationId' }); // thêm UNIQUE ở migration
+Ticket.belongsTo(Reservation, { foreignKey: 'reservationId' }); 
 
 // Spot — Ticket (để lưu lịch sử vé theo chỗ)
 Spot.hasMany(Ticket, { foreignKey: 'spot_id', onUpdate: 'CASCADE', sourceKey: 'id' });
