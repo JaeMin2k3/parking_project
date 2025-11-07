@@ -88,7 +88,7 @@ exports.postSign = async (req, res) => {
 
     
       verifyLink = `${process.env.APP_BASE_URL}/verify-email/${encodeURIComponent(rawToken)}`;
-
+      
       t.afterCommit(async () => {
         await mailer.sendMail({
           to: email,
@@ -120,7 +120,7 @@ async function createAndSendVerifyLink(user, t) {
   console.log(user)
   const rawToken = crypto.randomBytes(32).toString('hex');
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 30); // 30 phút
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 30); 
 
   await model.UserVerify.create({ gmailCustomer: user.gmail, tokenHash, expiresAt }, { transaction: t });
 
@@ -160,7 +160,7 @@ exports.postResendVerify = async (req, res, next) => {
 // 1) Bridge GET: tự động POST token lên API
 exports.verifyEmailBridge = (req, res) => {
   const token  = encodeURIComponent(String(req.params.token || ''));
-  const action = `${process.env.APP_BASE_URL}/verify-email`; // POST đích
+  const action = `${process.env.APP_BASE_URL}/verify-email`; 
 
   res.set('Content-Type','text/html; charset=utf-8').send(
     `<!doctype html>

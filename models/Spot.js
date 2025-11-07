@@ -10,7 +10,7 @@ const Spot = sequelize.define('Spot', {
   tableName: 'spots',
   underscored: true,
   indexes: [
-    { unique: true, fields: ['area', 'position'] }, // không trùng vị trí trong cùng khu
+    { unique: true, fields: ['area', 'position'] }, 
   ],
 });
  return Spot;
