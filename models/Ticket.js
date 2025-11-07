@@ -10,7 +10,8 @@ module.exports = (sequelize) => {
     booked_start: { type: DataTypes.DATE, allowNull: true },
     booked_end: { type: DataTypes.DATE, allowNull: true },
     start_time: { type: DataTypes.DATE, allowNull: false },
-    status: {type: DataTypes.BOOLEAN, allowNull: false, default: true}
+    finish_time: {type: DataTypes.DATE, allowNull:true},
+    status: {type: DataTypes.ENUM('active','inactive'), allowNull: false, default: 'active'}
   }, {
     tableName: 'tickets',
   });
