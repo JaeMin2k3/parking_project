@@ -1,7 +1,7 @@
 const express = require('express');
 const app = express();
 const bodyParser = require('body-parser');
-const sequelize = require('./util/database');
+const sequelize = require('./config/database');
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false })); 

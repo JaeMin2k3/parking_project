@@ -5,12 +5,13 @@ const Spot = sequelize.define('Spot', {
   area: { type: DataTypes.CHAR(1), allowNull: false },
   position: { type: DataTypes.INTEGER, allowNull: false },
   isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
-  type: {type: DataTypes.ENUM('CAR', 'MOTORBIKE')}
+  vehicleType: {type: DataTypes.ENUM('CAR', 'MOTORBIKE')},
+  slotType: { type: DataTypes.ENUM('ONLINE', 'OFFLINE'), allowNull: false, defaultValue: 'OFFLINE' }
 }, {
   tableName: 'spots',
-  underscored: true,
   indexes: [
     { unique: true, fields: ['area', 'position'] }, 
+    { fields: ['isActive', 'vehicleType', 'slotType'] }
   ],
 });
  return Spot;

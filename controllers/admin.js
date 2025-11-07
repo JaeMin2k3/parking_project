@@ -15,7 +15,7 @@ exports.postLogin = async(req, res, next) => {
     console.log(admin);
     const oke =  await bcrypt.compare(password, admin.password_hash);
     if(oke){
-      jwt.sign({id: admin.username}, process.env.SECRET_KEY, {expiresIn: "24h"},
+      jwt.sign({id: admin.username, role: admin.role}, process.env.SECRET_KEY, {expiresIn: "24h"},
         (err, token) => {
           if(err){
             console.log(err);

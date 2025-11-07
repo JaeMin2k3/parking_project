@@ -7,12 +7,14 @@ module.exports = (sequelize) => {
     startBlock: {type: DataTypes.INTEGER.UNSIGNED, allowNull: true},
     blockCount: {type: DataTypes.INTEGER.UNSIGNED, allowNull: false}, 
     status: { type: DataTypes.ENUM('PENDING','CONFIRMED','CANCELLED'), allowNull: false, defaultValue: 'PENDING' },
-    type: {type: DataTypes.ENUM('on', 'off'), allowNull: false},
-    startTime: {type: DataTypes.DATE, allowNull: true}
+    ticketType: {type: DataTypes.ENUM('on', 'off'), allowNull: false},
+    startTime: {type: DataTypes.DATE, allowNull: true},
+    plate: {type: DataTypes.STRING(13), allowNull: false}
   }
   , {
   tableName: 'reservations',
-  }
+  },
+ 
 );
   return Reservation;
 };
