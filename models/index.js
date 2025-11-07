@@ -1,4 +1,4 @@
-const sequelize  = require('../util/database');
+const sequelize  = require('../config/database');
 
 const Staff = require('./Staff')(sequelize);
 const Spot  = require('./Spot')(sequelize);
