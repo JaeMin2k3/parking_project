@@ -5,7 +5,7 @@ module.exports = (sequelize) => {
     id: { type: DataTypes.BIGINT.UNSIGNED, autoIncrement: true, primaryKey: true },
     date: {type: DataTypes.DATEONLY, allowNull: false},
     startBlock: {type: DataTypes.INTEGER.UNSIGNED, allowNull: true},
-    blockCount: {type: DataTypes.INTEGER.UNSIGNED, allowNull: false}, 
+    blockCount: {type: DataTypes.INTEGER.UNSIGNED, allowNull: true}, 
     status: { type: DataTypes.ENUM('PENDING','CONFIRMED','CANCELLED'), allowNull: false, defaultValue: 'PENDING' },
     ticketType: {type: DataTypes.ENUM('on', 'off'), allowNull: false},
     startTime: {type: DataTypes.DATE, allowNull: true},
