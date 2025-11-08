@@ -47,6 +47,8 @@ exports.postLogin = async (req,res,next) => {
 }
 
 const platerecognizer = require('../util/plateRecognizer');
+const cloudinary = require('../config/cloudinary')
+const fs = require('fs')
 exports.postImage = async(req, res, next) => {
   try{
     const filePath = req.file.path; // do multer đã gắn thông tin của file chứa ảnh vào req.file, ở trong router
@@ -65,18 +67,34 @@ exports.postImage = async(req, res, next) => {
     vehicleType = "CAR";
     }
     const plate = data.results[0].plate;
-    const reservation = await Reservation.findOne({where: {plate: plate, status: "CONFIRMED", ticketType: vehicleType}})
+    if(!plate) return res.status(400).json({
+      message: "Không thể xác định được biển số vui lòng chụp lại"
+    })
+    const reservation = await model.Reservation.findOne({where: {plate: plate, status: "CONFIRMED", ticketType: vehicleType}})
     const transaction = await sequelize.transaction();
     if(reservation){
       const spotID = reservation.spotId;
-      const spot = await Spot.findOne({where: {id: spotID}}, {transaction});
-      const ticket = await Ticket.create({
+      const spot = await model.Spot.findOne({where: {id: spotID}, transaction});
+      const uploadResult = await cloudinary.uploader.upload(filePath, {
+      folder: 'parking'
+      });
+      console.log(uploadResult);
+      try {
+        fs.unlinkSync(filePath);
+        console.log('Đã xóa file local:', filePath);
+      } catch (err) {
+        console.error('Không thể xóa file local:', err);
+      }
+      const ticket = await model.Ticket.create({
         spotId: spotID,
         vehicleType: spot.type,
         bookedStart: reservation.booked_start,
-        bookedStart: reservation.booked_end,
-        startTime: Date.now(),
-        status: 'active'
+        bookedEnd: reservation.booked_end,
+        startTime: new Date(),
+        status: 'active',
+        urlCloudinary: uploadResult.secure_url,
+        plate: plate,
+        spot_id: spot.id,
       }, {transaction})
       if(ticket){
         res.status(200).json({
@@ -85,32 +103,47 @@ exports.postImage = async(req, res, next) => {
       })
       }
     }else{
-     const spot = await Spot.findOne({where: {
+     const spot = await model.Spot.findOne({where: {
         isActive: 1,
         vehicleType: vehicleType,
         slotType: "OFFLINE"
-      }}, {transaction});
-      await Reservation.create({where: {
-        date: Date.now,
-        status: "active",
+      }, transaction});
+      console.log(spot);
+      const reservation = await model.Reservation.create( {
+        date: new Date(),
+        status: "CONFIRMED",
         ticketType: "off",
-        startTime: Date.now(),
-        spotId: spot.id
-      }},{transaction})
-      await Ticket.create({where: {
+        startTime: new Date(),
+        spotId: spot.id,
+        plate: plate
+      },{transaction})
+      console.log(reservation);
+      const uploadResult = await cloudinary.uploader.upload(filePath, {
+      folder: 'parking'
+      });
+      console.log(uploadResult);
+      try {
+        fs.unlinkSync(filePath);
+        console.log('Đã xóa file local:', filePath);
+      } catch (err) {
+        console.error('Không thể xóa file local:', err);
+      }
+      await model.Ticket.create({
         area: spot.area,
         position: spot.position,
         vehicleType: spot.vehicleType,
-        startTime: Date.now(),
+        startTime: new Date(),
         status: "active",
-        spot_Id: spot.id
-      }}, {transaction})
-
+        spot_id: spot.id,
+        urlCloudinary: uploadResult.secure_url,
+        plate: plate
+      }, {transaction})
       res.status(200).json({
         area: spot.area,
         position: spot.position
       })
-    } 
+    }
+    await transaction.commit(); 
   }catch(err) {
     throw(err);
   }
