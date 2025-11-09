@@ -48,6 +48,7 @@ exports.postLogin = async (req,res,next) => {
 
 const platerecognizer = require('../util/plateRecognizer');
 const cloudinary = require('../config/cloudinary')
+const checkTime = require('../util/checkTime')
 const fs = require('fs')
 exports.postImage = async(req, res, next) => {
   try{
@@ -73,6 +74,7 @@ exports.postImage = async(req, res, next) => {
     const reservation = await model.Reservation.findOne({where: {plate: plate, status: "CONFIRMED", ticketType: vehicleType}})
     const transaction = await sequelize.transaction();
     if(reservation){
+      await checkTime(reservation, res);
       const spotID = reservation.spotId;
       const spot = await model.Spot.findOne({where: {id: spotID}, transaction});
       const uploadResult = await cloudinary.uploader.upload(filePath, {
