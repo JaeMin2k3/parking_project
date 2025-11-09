@@ -23,7 +23,7 @@ const routerStaff = require('./routers/staff')
 
 
 
-// app.use('admin',routerAdmin);
+//
 app.use('/user', routerUser);
 app.use('/admin', routerAdmin);
 app.use('/staff', routerStaff);
@@ -33,7 +33,7 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ message: err.message || 'Internal error' });
 });
 
-sequelize.sync().then(result => {
+sequelize.sync({force: true}).then(result => {
   app.listen(port);
 }).catch(err => {
   console.log(err);

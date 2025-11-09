@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const controllerUser = require('../controllers/user')
-const validateUserNamePhone = require('../util/validateUsernamePhone')
-const TokenVerify = require('../util/jwt')
+const validateUserNamePhone = require('../middleware/validateUsernamePhone')
+const TokenVerify = require('../middleware/jwt')
 
 router.post('/login', validateUserNamePhone, controllerUser.postLogin)
 router.post('/signup', validateUserNamePhone, controllerUser.postSign)

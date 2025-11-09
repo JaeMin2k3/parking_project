@@ -1,13 +1,14 @@
 const model = require('../models/index');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const sequelize = require('../config/database');
 require('dotenv').config();
 // admin/login
 exports.postLogin = async(req, res, next) => {
   const {username, password} = req.body;  
   const admin = await model.Staff.findOne({
     where: {username, role: "admin"},
-    attribute: ["username", "password_hash", "role"],
+    attributes: ["username", "password_hash", "role"],
     raw: true
   })
 
@@ -43,54 +44,140 @@ exports.postLogin = async(req, res, next) => {
 
 //admin/staffs
 exports.getAllStaffs = async (req,res, next) => {
-  const staffs = await model.Staff.findAll({
-    where: {
-      role: "staff"
-    },
-    attribute: ["username", "password"],
-    raw: true
-  });
-
-  if(staffs){
-    res.status(200).json({
+  try{
+      const staffs = await model.Staff.findAll({
+      where: {
+        role: "staff"
+      },
+      attributes: ["name", "date","username", "status", "createdAt"],
+      raw: true
+      });
+      res.status(200).json({
+        message: "success",
+        staffs: staffs || []
+      })
+  }catch(err){
+    console.log(err);
+    throw(err);
+  }
+   
+}
+// admin/staff/:id
+exports.getStaff = async (req,res,next) => {
+  const username = req.params.id;
+  if(!username) {res.status(404).json({message: "username đang rỗng"})};
+  try {
+    const staff = await model.Staff.findOne({where: {
+      username: username
+    }})
+    if(!staff){res.status(404).json({message: "nhân viên không tồn tại"})};
+    return res.status(200).json({
       message: "success",
-      staffs: staffs
+      staff: staff
     })
-  }else{
-    res.status(404).json({
-      message: "không có tài khoản nhân viên nào"
-    })
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({message: "server bị lỗi không thể lấy được thông tin staff"})
   }
 }
+// admin/delete/:idStaff
+exports.postDeleteStaff = async (req,res,next) => {
+  const id = req.params.idStaff;
+  const transaction = await sequelize.transaction();
 
+  try {
+    const ok = await model.Staff.destroy({
+      where: {
+        username: id
+      }, transaction
+    });
+    if(!ok) {
+      await transaction.rollback();
+      return res.status(404).json({message: "tài khoản này không được tìm thấy"});
+    }
+    await transaction.commit();
+    res.status(200).json({message: "xoá nhân viên thành công"})
+  } catch (error) {
+    console.log(error);
+    await transaction.rollback();
+    return res.status(500).json({message: "server bị lỗi"});
+  }
+}
+// admin/edit/:idStaff
+exports.postEditStaff = async(req,res,next) => {
+  const id = req.params.idStaff;
+  const {name, date, pw} = req.body;
+  if(!name || !date || !pw) return res.status(400).json({message: "vui lòng điển đầy đủ các trường thông tin"});
+  const pw_hash = bcrypt.hashSync(pw, 10);
+  const transaction = await sequelize.transaction();
+  try {
+    const ok = await model.Staff.update(
+    {
+      name: name,
+      date: date,
+      password_hash: pw_hash
+    },
+    {
+      where: {username: id}, transaction
+    });
+    if(ok[0] === 0){
+      await transaction.rollback();
+      return res.status(404).json({message: "username không tồn tại"})
+    }
+
+    await transaction.commit();
+    return res.status(200).json({message: "Cập nhật thành công"});
+  } catch (error) {
+    console.log( error);
+    await transaction.rollback();
+    return res.status(500).json({message: "server bị lỗi"});
+  }
+}
 // admin/newStaff
 exports.postNewStaff = async (req,res,next) => {
-  const {username, password} = req.body;
-  console.log(username + "+" + password);
-  const pw_hash = await bcrypt.hashSync(password, 10);
-  console.log(pw_hash)
-  await model.Staff.create({
-    username: username,
-    password_hash: pw_hash,
-    role: 'staff',
-    status: 1
-  })
-  res.status(200).json({
-    message: 'success'
-  })
+  try {
+    const {name, date, username, password} = req.body;
+    console.log(username + "+" + password);
+    const checkStaff = await model.Staff.findOne({
+      where: {username: username}
+    })
+    if(checkStaff) return res.status(409).json({
+      message: "username đã tồn tại"
+    })
+    const pw_hash = await bcrypt.hashSync(password, 10);
+    console.log(pw_hash)
+    await model.Staff.create({
+      name: name,
+      date: date,
+      username: username,
+      password_hash: pw_hash,
+      role: 'staff',
+      status: 1
+    })
+    res.status(200).json({
+      message: 'success'
+    })
+  } catch (err) {
+    console.log(err);
+    throw(err);
+  }
+ 
 } 
 
 
-
+// admin/auth/token
 exports.getRole = async(req, res, next) => {
-  const token = req.headers['authorization'];
-  if(token){
-    const check = await jwt.verify(token, process.env.SECRET_KEY);
-    if(check.role === 'admin') res.status(200).json({
-      message: "hello admin"
-    })
-    else res.status(404).json({
-      message: "bạn không phải là admin"
-    })
-  }
+  try {
+    const token = req.headers['authorization'];
+    if(!token) res.status(401).json({message: "Token không tồn tại"});
+      const decode = await jwt.verify(token, process.env.SECRET_KEY);
+      res.status(200).json({
+        message: "success",
+        role: decode.role
+      })
+    } catch (err) {
+      console.log(err);
+      res.status(401).json({meseage: "Token không hợp lệ hoặc hết hạn"})
+    }
 }
+
