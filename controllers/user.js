@@ -157,7 +157,7 @@ exports.postResendVerify = async (req, res, next) => {
 
 
 
-// 1) Bridge GET: tự động POST token lên API
+//  tự động POST token lên API
 exports.verifyEmailBridge = (req, res) => {
   const token  = encodeURIComponent(String(req.params.token || ''));
   const action = `${process.env.APP_BASE_URL}/verify-email`; 
@@ -176,7 +176,7 @@ exports.verifyEmailBridge = (req, res) => {
 };
 
 
-// 2) API POST: xử lý verify
+// /user/verify-email
 exports.postVerifyEmail = async (req, res, next) => {
   try {
     const raw = String(req.body.token || '');
