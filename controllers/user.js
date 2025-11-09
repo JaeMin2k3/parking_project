@@ -219,9 +219,11 @@ exports.getInfor = async (req,res,next) =>{
       return res.status(401).json({ message: "Token không hợp lệ hoặc đã hết hạn" });
   }
   const username = decode.id;
-  const user = await model.Customer.findByPk({where: {
-    username: username
-  }})
+  const user = await model.Customer.findByPk({
+    where: {username: username},
+    attribute: ["username", "gmail", "verify"],
+    raw: true
+  })
 
   if(!user) return res.status(404).json({message: "user không tồn tại"});
   return res.status(200).json({
