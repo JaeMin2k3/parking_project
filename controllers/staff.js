@@ -6,7 +6,14 @@ const Spot = require('../models/Spot')
 const Staff = require('../models/Staff')
 const Ticket = require('../models/Ticket')
 require('dotenv').config();
+const platerecognizer = require('../helper/plateRecognizer');
+const cloudinary = require('../config/cloudinary')
+const checkTime = require('../helper/checkTime')
+const fs = require('fs')
 const sequelize = require('../config/database')
+
+
+
 // staff/login
 exports.postLogin = async (req,res,next) => {
   const {username, password} = req.body;
@@ -46,10 +53,7 @@ exports.postLogin = async (req,res,next) => {
   }
 }
 
-const platerecognizer = require('../util/plateRecognizer');
-const cloudinary = require('../config/cloudinary')
-const checkTime = require('../util/checkTime')
-const fs = require('fs')
+// /staff/ticket-entry
 exports.postImage = async(req, res, next) => {
   try{
     const filePath = req.file.path; // do multer đã gắn thông tin của file chứa ảnh vào req.file, ở trong router

@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const { Op } = require('sequelize');
 require('dotenv').config();
 const crypto = require('crypto');
-const { mailer } = require('../util/mailer');
+const { mailer } = require('../config/mailer');
 
 // user/login
 exports.postLogin = async (req, res, next) => {
@@ -24,7 +24,7 @@ exports.postLogin = async (req, res, next) => {
     const ok = await bcrypt.compare(password, user.password_hash);
     // check mặt khẩu
     if(ok){
-      jwt.sign({_id: user.username}, process.env.SECRET_KEY, {expiresIn: '24h'},
+      jwt.sign({id: user.username}, process.env.SECRET_KEY, {expiresIn: '24h'},
          (err, token) => {
           if(err){
             console.log(err);
@@ -207,3 +207,29 @@ exports.postVerifyEmail = async (req, res, next) => {
     return next(e);
   }
 };
+
+
+exports.getInfor = async (req,res,next) =>{
+  try {
+  const token = req.headers.authorization || req.headers.Authorization;
+  let decode;
+  try {
+    decode = jwt.verify(token, process.env.SECRET_KEY);
+  } catch (err) {
+      return res.status(401).json({ message: "Token không hợp lệ hoặc đã hết hạn" });
+  }
+  const username = decode.id;
+  const user = await model.Customer.findByPk({where: {
+    username: username
+  }})
+
+  if(!user) return res.status(404).json({message: "user không tồn tại"});
+  return res.status(200).json({
+    message: "success",
+    user: user
+  })
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({message: "lỗi server"});
+  }
+}

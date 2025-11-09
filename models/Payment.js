@@ -9,15 +9,5 @@ module.exports = (sequelize) => {
   }, {
     tableName: 'payments'
   });
-
-  // Enforce XOR: chỉ 1 trong 2 trường có giá trị
-  Payment.addHook('beforeValidate', (p) => {
-    const hasTicket = !!p.ticket_id;
-    const hasResv = !!p.reservation_id;
-    if (hasTicket === hasResv) {
-      throw new Error('Payment must link to either ticket OR reservation');
-    }
-  });
-
   return Payment;
 };
