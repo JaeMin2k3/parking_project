@@ -15,7 +15,7 @@ exports.postLogin = async (req, res, next) => {
     const user = await model.Customer.findOne(
     {
       where: {username},
-      attributes: ['username', "password_hash"],
+      attributes: ['username', "password_hash", "role"],
       raw: true
     })
     console.log(user)
@@ -24,7 +24,7 @@ exports.postLogin = async (req, res, next) => {
     const ok = await bcrypt.compare(password, user.password_hash);
     // check mặt khẩu
     if(ok){
-      jwt.sign({id: user.username}, process.env.SECRET_KEY, {expiresIn: '24h'},
+      jwt.sign({id: user.username,role: user.role}, process.env.SECRET_KEY, {expiresIn: '24h'},
          (err, token) => {
           if(err){
             console.log(err);
