@@ -15,7 +15,7 @@ exports.postLogin = async (req, res, next) => {
     const user = await model.Customer.findOne(
     {
       where: {username},
-      attributes: ['username', "password_hash"],
+      attributes: ['username', "password_hash", "role"],
       raw: true
     })
     console.log(user)
@@ -24,7 +24,7 @@ exports.postLogin = async (req, res, next) => {
     const ok = await bcrypt.compare(password, user.password_hash);
     // check mặt khẩu
     if(ok){
-      jwt.sign({id: user.username}, process.env.SECRET_KEY, {expiresIn: '24h'},
+      jwt.sign({id: user.username,role: user.role}, process.env.SECRET_KEY, {expiresIn: '24h'},
          (err, token) => {
           if(err){
             console.log(err);
@@ -219,9 +219,11 @@ exports.getInfor = async (req,res,next) =>{
       return res.status(401).json({ message: "Token không hợp lệ hoặc đã hết hạn" });
   }
   const username = decode.id;
-  const user = await model.Customer.findByPk({where: {
-    username: username
-  }})
+  const user = await model.Customer.findByPk({
+    where: {username: username},
+    attribute: ["username", "gmail", "verify"],
+    raw: true
+  })
 
   if(!user) return res.status(404).json({message: "user không tồn tại"});
   return res.status(200).json({

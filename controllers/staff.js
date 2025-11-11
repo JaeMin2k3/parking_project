@@ -151,6 +151,7 @@ exports.postImage = async(req, res, next) => {
     }
     await transaction.commit(); 
   }catch(err) {
-    throw(err);
+    console.log(err);
+    next(err);
   }
 }
