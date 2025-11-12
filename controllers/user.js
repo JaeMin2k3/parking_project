@@ -239,6 +239,7 @@ exports.getInfor = async (req,res,next) =>{
 
 exports.postBarCode = async(req,res,next) => {
   const gmail = req.body.gmail;
+  console.log(gmail)
   if(!gmail) res.status(400).json({message: "vui lòng nhập gmail"})
   const rawToken = crypto.randomBytes(32).toString('hex');
   const tokenHash = crypto.createHash("sha256").update(rawToken).digest('hex');
@@ -252,7 +253,6 @@ exports.postBarCode = async(req,res,next) => {
     if(!checkCustomer) res.status(404).json({message: "gmail bị lỗi"});
     await model.UserReset.destroy({where:{
       gmail: gmail,
-      useAt: null
     }, transaction})
     const checkUserReset = await model.UserReset.create({
       tokenHash: tokenHash,
@@ -264,8 +264,8 @@ exports.postBarCode = async(req,res,next) => {
       transaction.rollback();
       res.status(500).json({message: "lỗi server không thể tạo được barcode"})
     }
-    transaction.afterCommit(async () => {
-      await mailer.sendMail({
+    await transaction.commit();
+    await mailer.sendMail({
       to: gmail,
       from: process.env.GMAIL_USER,
       subject: 'Reset Password',
@@ -274,11 +274,10 @@ exports.postBarCode = async(req,res,next) => {
         <p>Barcode để reset password của bạn là: ${rawToken};
         `
     });
-    });
     res.status(200).json({message: "success"})
   } catch (error) {
     console.log(error);
-    transaction.rollback();
+    await transaction.rollback();
     next(error);
   }
   
@@ -292,15 +291,24 @@ exports.postForgetPw = async(req, res, next) => {
     res.status(400).json({message: "vui lòng nhập đủ các trường dữ liệu"})
   }
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-  const check = model.UserReset.findOne({where: {
+  const check = await model.UserReset.findOne({where: {
     gmail: gmail,
     tokenHash: tokenHash
   }});
   if(!check) res.status(400).json({
     message: "gmail hoặc barcode của bạn đang bị sai"
   });
+  console.log(check);
   const pw_hash = bcrypt.hashSync(pw, 10);
+  console.log(check.expiresAt);
+  console.log(check.useAt)
   if(!check.useAt && check.expiresAt >= Date.now() ){
+    await model.UserReset.update({
+      useAt: new Date()
+    },{where: 
+      {
+        gmail: gmail
+      }})
     const newCustomer = await model.Customer.update({
     password_hash: pw_hash
   },{
@@ -310,7 +318,7 @@ exports.postForgetPw = async(req, res, next) => {
   })
   if(!newCustomer) res.status(500).json({message: "lỗi server không thể thay đổi mật khẩu"});
   res.status(200).json({message: "thay đổi mật khẩu thành công"})
-  }
+  }else 
     res.status(404).json({message: "token đã hết hạn"})
   
 }
