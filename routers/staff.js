@@ -6,5 +6,7 @@ const multer = require('multer');
 const upload = multer({dest: "upload/"})
 
 Router.post('/login', controllerStaff.postLogin);
+
 Router.post('/ticket-entry',upload.single("image"), controllerStaff.postImage);
+
 module.exports = Router
