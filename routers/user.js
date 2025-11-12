@@ -12,4 +12,7 @@ router.get('/verify-email/:token', controllerUser.verifyEmailBridge);
 router.post('/verify-email', controllerUser.postVerifyEmail);
 
 router.get('/infor', controllerUser.getInfor);
+
+router.post('/send-barcode', controllerUser.postBarCode);
+router.post('/forget-password', controllerUser.postForgetPw);
 module.exports = router;

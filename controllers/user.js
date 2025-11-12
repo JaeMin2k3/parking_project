@@ -5,6 +5,7 @@ const { Op } = require('sequelize');
 require('dotenv').config();
 const crypto = require('crypto');
 const { mailer } = require('../config/mailer');
+const sequelize = require('../config/database');
 
 // user/login
 exports.postLogin = async (req, res, next) => {
@@ -103,9 +104,9 @@ exports.postSign = async (req, res) => {
       });
     });
 
-    if (process.env.NODE_ENV !== 'production') {
-      return res.status(200).json({ message: 'Tạo tài khoản thành công. Kiểm tra email để xác minh.', verifyLink });
-    }
+    // if (process.env.NODE_ENV !== 'production') {
+    //   return res.status(200).json({ message: 'Tạo tài khoản thành công. Kiểm tra email để xác minh.', verifyLink });
+    // }
     return res.status(200).json({ message: 'Tạo tài khoản thành công. Kiểm tra email để xác minh.' });
   } catch (err) {
     console.error(err);
@@ -234,4 +235,82 @@ exports.getInfor = async (req,res,next) =>{
     console.log(error);
     return res.status(500).json({message: "lỗi server"});
   }
+}
+
+exports.postBarCode = async(req,res,next) => {
+  const gmail = req.body.gmail;
+  if(!gmail) res.status(400).json({message: "vui lòng nhập gmail"})
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash("sha256").update(rawToken).digest('hex');
+  const expiresAt = new Date(Date.now() + 30* 60 * 1000);
+  const transaction = await sequelize.transaction();
+  try {
+    const checkCustomer = await model.Customer.findOne({where: {
+      gmail: gmail,
+      role: 'customer'
+    },transaction})
+    if(!checkCustomer) res.status(404).json({message: "gmail bị lỗi"});
+    await model.UserReset.destroy({where:{
+      gmail: gmail,
+      useAt: null
+    }, transaction})
+    const checkUserReset = await model.UserReset.create({
+      tokenHash: tokenHash,
+      expiresAt: expiresAt,
+      gmail: gmail,
+      useAt: null
+    }, {transaction});
+    if(!checkUserReset){
+      transaction.rollback();
+      res.status(500).json({message: "lỗi server không thể tạo được barcode"})
+    }
+    transaction.afterCommit(async () => {
+      await mailer.sendMail({
+      to: gmail,
+      from: process.env.GMAIL_USER,
+      subject: 'Reset Password',
+      html: `
+        <p>Xin chào bạn, rất vui khi bạn đã tin tưởng và sử dụng website của chúng tôi</P>
+        <p>Barcode để reset password của bạn là: ${rawToken};
+        `
+    });
+    });
+    res.status(200).json({message: "success"})
+  } catch (error) {
+    console.log(error);
+    transaction.rollback();
+    next(error);
+  }
+  
+}
+
+exports.postForgetPw = async(req, res, next) => {
+  const gmail = req.body.gmail;
+  const rawToken = req.body.token;
+  const pw = req.body.password;
+  if(!gmail || !rawToken || !pw){
+    res.status(400).json({message: "vui lòng nhập đủ các trường dữ liệu"})
+  }
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const check = model.UserReset.findOne({where: {
+    gmail: gmail,
+    tokenHash: tokenHash
+  }});
+  if(!check) res.status(400).json({
+    message: "gmail hoặc barcode của bạn đang bị sai"
+  });
+  const pw_hash = bcrypt.hashSync(pw, 10);
+  if(!check.useAt && check.expiresAt >= Date.now() ){
+    const newCustomer = await model.Customer.update({
+    password_hash: pw_hash
+  },{
+    where: {
+      gmail: gmail
+    }
+  })
+  if(!newCustomer) res.status(500).json({message: "lỗi server không thể thay đổi mật khẩu"});
+  res.status(200).json({message: "thay đổi mật khẩu thành công"})
+  }
+    res.status(404).json({message: "token đã hết hạn"})
+  
 }

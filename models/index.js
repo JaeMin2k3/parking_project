@@ -10,6 +10,7 @@ const Customer = require('./Customer')(sequelize);
 const Bill = require('./Bill')(sequelize);
 const UserVerify   = require('./UserVerify')(sequelize);
 const ReservationBlock = require('./ReservationBlock')(sequelize)
+const UserReset = require('./UserReset')(sequelize)
 // Staff — Ticket
 Staff.hasMany(Ticket, { foreignKey: 'staffUsername', sourceKey: 'username', onDelete: "set null" });
 Ticket.belongsTo(Staff, { foreignKey: 'staffUsername', targetKey: 'username', onDelete: "Set null" });
@@ -51,13 +52,18 @@ Bill.belongsTo(Ticket, { foreignKey: 'ticketId' });
 Customer.hasMany(UserVerify, {foreignKey: 'gmailCustomer', onDelete: 'CASCADE', sourceKey: 'gmail'});
 UserVerify.belongsTo(Customer, {foreignKey: 'gmailCustomer', targetKey: 'gmail'})
 
+// Reservattion - ReservationBlock
 Reservation.hasMany(ReservationBlock, { foreignKey: { name: 'reservation_id', allowNull: false }, sourceKey: 'id' });
 ReservationBlock.belongsTo(Reservation, { foreignKey: { name: 'reservation_id', allowNull: false }, targetKey: 'id'});
 
+// Spot - ReservationBlock
 Spot.hasMany(ReservationBlock, { foreignKey: { name: 'Spot_id', allowNull: false }, sourceKey: 'id' });
 ReservationBlock.belongsTo(Spot, { foreignKey: { name: 'Spot_id', allowNull: false }, targetKey: 'id' });
 
+// Customer - UserReset
 
+Customer.hasMany(UserReset, {foreignKey: 'gmail', sourceKey: 'gmail' });
+UserReset.belongsTo(Customer, {foreignKey: 'gmail',targetKey: 'gmail'})
 module.exports = {
   Staff,
   Customer,
@@ -67,5 +73,6 @@ module.exports = {
   Ticket,
   Payment,
   Bill,
-  UserVerify
+  UserVerify,
+  UserReset
 };
