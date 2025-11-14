@@ -40,8 +40,8 @@ Reservation.hasOne(Ticket, { foreignKey: 'reservationId', onDelete: 'SET NULL', 
 Ticket.belongsTo(Reservation, { foreignKey: 'reservationId' }); 
 
 // Spot — Ticket (để lưu lịch sử vé theo chỗ)
-Spot.hasMany(Ticket, { foreignKey: 'spot_id', onUpdate: 'CASCADE', sourceKey: 'id' });
-Ticket.belongsTo(Spot, { foreignKey: 'spot_id', targetKey: 'id'  });
+Spot.hasMany(Ticket, { foreignKey: 'spotId', onUpdate: 'CASCADE', sourceKey: 'id' });
+Ticket.belongsTo(Spot, { foreignKey: 'spotId', targetKey: 'id'  });
 
 
 // Ticket — Bill (1–1)
@@ -53,12 +53,12 @@ Customer.hasMany(UserVerify, {foreignKey: 'gmailCustomer', onDelete: 'CASCADE', 
 UserVerify.belongsTo(Customer, {foreignKey: 'gmailCustomer', targetKey: 'gmail'})
 
 // Reservattion - ReservationBlock
-Reservation.hasMany(ReservationBlock, { foreignKey: { name: 'reservation_id', allowNull: false }, sourceKey: 'id' });
-ReservationBlock.belongsTo(Reservation, { foreignKey: { name: 'reservation_id', allowNull: false }, targetKey: 'id'});
+Reservation.hasMany(ReservationBlock, { foreignKey: { name: 'reservationId', allowNull: false }, sourceKey: 'id' });
+ReservationBlock.belongsTo(Reservation, { foreignKey: { name: 'reservationId', allowNull: false }, targetKey: 'id'});
 
 // Spot - ReservationBlock
-Spot.hasMany(ReservationBlock, { foreignKey: { name: 'Spot_id', allowNull: false }, sourceKey: 'id' });
-ReservationBlock.belongsTo(Spot, { foreignKey: { name: 'Spot_id', allowNull: false }, targetKey: 'id' });
+Spot.hasMany(ReservationBlock, { foreignKey: { name: 'spotId', allowNull: false }, sourceKey: 'id' });
+ReservationBlock.belongsTo(Spot, { foreignKey: { name: 'spotId', allowNull: false }, targetKey: 'id' });
 
 // Customer - UserReset
 
