@@ -3,3 +3,40 @@ const bcrypt = require('bcrypt');
 const admin = "123456";
 console.log(bcrypt.hashSync(admin,10));
 // tk: admin, mk: $2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi
+
+// INSERT INTO spots (area, position, isActive, vehicleType, slotType, createdAt, updatedAt)
+// WITH RECURSIVE NumberSeries AS (
+//     -- 1. Điểm neo: Bắt đầu chuỗi số từ 1
+//     SELECT 1 AS n
+//     UNION ALL
+//     -- 2. Phần đệ quy: Cộng 1 cho đến khi n < 100 (sẽ dừng ở 100)
+//     SELECT n + 1
+//     FROM NumberSeries
+//     WHERE n < 100
+// )
+// -- 3. Chèn dữ liệu từ chuỗi số đã tạo
+// SELECT
+//     'B',        -- GIẢ ĐỊNH: area. Bạn có thể thay đổi.
+//     n,          -- position (1, 2, 3, ..., 100)
+//     1,          -- GIẢ ĐỊNH: isActive = 1 (true).
+//     'MOTORBIKE',      -- GIẢ ĐỊNH: vehicleType. Đổi thành 'MOTORBIKE' nếu cần.
+//     CASE
+//         WHEN n <= 70 THEN 'OFFLINE' -- 70 hàng đầu tiên
+//         ELSE 'ONLINE'               -- 30 hàng còn lại
+//     END AS slotType,
+//     NOW(),      -- createdAt
+//     NOW()       -- updatedAt
+// FROM NumberSeries;
+
+// INSERT INTO staff (username, password_hash, name, date, role, status, createdAt, updatedAt)
+// VALUES
+// ('staff2', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'Nhân viên 2', '2025-11-14', 'staff', 1, NOW(), NOW()),
+// ('staff3', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'Nhân viên 3', '2025-11-14', 'staff', 1, NOW(), NOW()),
+// ('staff4', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'Nhân viên 4', '2025-11-14', 'staff', 1, NOW(), NOW()),
+// ('staff5', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'Nhân viên 5', '2025-11-14', 'staff', 1, NOW(), NOW()),
+// ('staff6', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'Nhân viên 6', '2025-11-14', 'staff', 1, NOW(), NOW()),
+// ('staff7', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'Nhân viên 7', '2025-11-14', 'staff', 1, NOW(), NOW()),
+// ('staff8', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'Nhân viên 8', '2025-11-14', 'staff', 1, NOW(), NOW()),
+// ('staff9', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'Nhân viên 9', '2025-11-14', 'staff', 1, NOW(), NOW()),
+// ('staff10', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'Nhân viên 10', '2025-11-14', 'staff', 1, NOW(), NOW()),
+// ('admin', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'Quản trị viên', '2025-11-14', 'admin', 1, NOW(), NOW());

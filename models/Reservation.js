@@ -12,10 +12,16 @@ module.exports = (sequelize) => {
     defaultValue: 'PENDING'
     },
     channel: {type: DataTypes.ENUM('ONLINE', 'OFFLINE'),allowNull: false},
-    plate: {type: DataTypes.STRING(13), allowNull: false}
+    plate: {type: DataTypes.STRING(13), allowNull: false},
+    vehicleType: {type: DataTypes.ENUM('CAR', 'MOTORBIKE')}
   }
   , {
   tableName: 'reservations',
+  index: [
+    {unique: true, fields: ['date', 'startBlock']},
+    {fields: ['date', 'vehicleType', 'channel']},
+    {fields: ['date', 'vehicleType', 'plate', 'status']}
+  ]
   },
  
 );

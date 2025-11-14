@@ -10,6 +10,7 @@ const sequelize = new Sequelize(
     port: +(process.env.DB_PORT), // biến chuỗi thành sô
     dialect: process.env.DB_DIALECT ,
     logging: false,
+    timezone: '+07:00'
   }
 );
 
