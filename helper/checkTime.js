@@ -1,14 +1,12 @@
-module.exports = async function checkTime(reservation, res) {
+module.exports = async function checkTime(reservation) {
   const now = new Date();
-  const currentDate = now.toISOString.split('T')[0];
+  //Dùng locale của Thụy Điển (sv-SE) để lấy format YYYY-MM-DD tại vì javascript không giống với java hay python có thể format YYYY-MM-DD 
+  const currentDate = now.toLocaleDateString('sv-SE');
   const currentTime = now.getHours()+ now.getMinutes()/60;
   if(currentDate === reservation.date){
     if(currentTime >= reservation.startBlock && currentTime < (reservation.startBlock+reservation.endBlock)){
-      console.log("thời gian hợp lệ")
-    }else{
-      res.status(400).json({
-        message: `thời gian đỗ xe của bạn vào ngày${reservation.date} từ ${reservation.startBlock} đến ${(reservation.startBlock+reservation.endBlock)}`
-      })
+      return true;
     }
   }
+  return false;
 }

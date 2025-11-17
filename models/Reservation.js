@@ -7,7 +7,7 @@ module.exports = (sequelize) => {
     startBlock: {type: DataTypes.INTEGER.UNSIGNED, allowNull: true},
     blockCount: {type: DataTypes.INTEGER.UNSIGNED, allowNull: true}, 
     status: {
-    type: DataTypes.ENUM('PENDING', 'CONFIRMED', 'CANCELLED'),
+    type: DataTypes.ENUM('PENDING', 'CONFIRMED', 'CANCELLED','CHECKIN', 'CHECKOUT'),
     allowNull: false,
     defaultValue: 'PENDING'
     },
