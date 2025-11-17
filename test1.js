@@ -1,4 +1,3 @@
-const date = new Date().toISOString();
-  const day = date.trim().split('T')[0];
-  const hour =date.trim().split('T')[1].split('.')[0];
-  console.log(day + " " + hour);
+const currentDate = new Date().toLocaleDateString('sv-SE');
+console.log(currentDate);
+  

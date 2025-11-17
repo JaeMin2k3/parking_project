@@ -12,6 +12,7 @@ const checkTime = require('../helper/checkTime')
 const fs = require('fs')
 const sequelize = require('../config/database');
 const converTime = require('../helper/converTime');
+const uploadAndCleanup = require('../helper/uploadAndCleanup');
 
 
 
@@ -78,35 +79,35 @@ exports.postImage = async(req, res, next) => {
     } else {
     vehicleType = "CAR";
     }
-    const date = new Date().toISOString();
-    const date1 = date.split('T')[0]
+    const now = new Date();
+  //Dùng locale của Thụy Điển (sv-SE) để lấy format YYYY-MM-DD tại vì javascript không giống với java hay python có thể format YYYY-MM-DD 
+    const currentDate = now.toLocaleDateString('sv-SE');
     const reservation = await model.Reservation.findOne(
       {where: {
         plate: plate, 
         status: "CONFIRMED", 
         vehicleType: vehicleType,
-        date: date1
+        date: currentDate,
+        channel: 'ONLINE'
       }})
     const transaction = await sequelize.transaction();
     // chưa xử lí reservation đã checkin
     if(reservation){
-      await checkTime(reservation, res);
+      const check = await checkTime(reservation);
+      if(!check) return res.status(404).json({message: `thời gian bạn đặt xe từ ${reservation.startBlock}h đến ${(reservation.startBlock+ reservation.blockCount)}h. Vui lòng chờ `})
       const spotID = reservation.spotId;
       const spot = await model.Spot.findOne({where: {id: spotID}, transaction});
-      const uploadResult = await cloudinary.uploader.upload(filePath, {
-      folder: 'parking'
-      });
-      console.log(uploadResult);
-      try {
-        fs.unlinkSync(filePath);
-        console.log('Đã xóa file local:', filePath);
-      } catch (err) {
-        console.error('Không thể xóa file local:', err);
-      }
+      const uploadResult = await uploadAndCleanup(filePath)
+      await model.Reservation.update(
+        {status: 'CHECKIN'},
+        {
+        where: {id: reservation.id}, transaction
+        }
+      )
       const ticket = await model.Ticket.create({
         reservationId: reservation.id,
         spotId: spotID,
-        vehicleType: spot.type,
+        vehicleType: spot.vehicleType,
         bookedStart: reservation.booked_start,
         bookedEnd: reservation.booked_end,
         startTime: converTime(),
@@ -114,22 +115,25 @@ exports.postImage = async(req, res, next) => {
         urlCloudinaryCheckIn: uploadResult.secure_url,
         plate: plate,
       }, {transaction})
+      await transaction.commit(); 
       if(ticket){
         res.status(200).json({
         area: spot.area,
         position: spot.position
       })
       }
+      // nếu chưa có reservation
     }else{
      const spot = await model.Spot.findOne({where: {
         isActive: 1,
         vehicleType: vehicleType,
         slotType: "OFFLINE"
       }, transaction});
+      if(!spot) return res.status(400).json({message: "slot full"})
       console.log(spot);
       const reservation = await model.Reservation.create( {
         date: new Date(),
-        status: "CONFIRMED",
+        status: "CHECKIN",
         ticketType: "off",
         startTime: new Date(),
         spotId: spot.id,
@@ -137,16 +141,8 @@ exports.postImage = async(req, res, next) => {
         channel: 'OFFLINE'
       },{transaction})
       console.log(reservation);
-      const uploadResult = await cloudinary.uploader.upload(filePath, {
-      folder: 'parking'
-      });
-      console.log(uploadResult);
-      try {
-        fs.unlinkSync(filePath);
-        console.log('Đã xóa file local:', filePath);
-      } catch (err) {
-        console.error('Không thể xóa file local:', err);
-      }
+      const uploadResult = await uploadAndCleanup(filePath)
+      await model.Spot.update({isActive: false}, {where: {id: spot.id}, transaction})
       await model.Ticket.create({
         date:date1,
         area: spot.area,
@@ -156,14 +152,16 @@ exports.postImage = async(req, res, next) => {
         status: "active",
         spotId: spot.id,
         urlCloudinaryCheckIn: uploadResult.secure_url,
-        plate: plate
+        plate: plate,
+        reservationId: reservation.id
       }, {transaction})
+      await transaction.commit(); 
       res.status(200).json({
         area: spot.area,
         position: spot.position
       })
     }
-    await transaction.commit(); 
+    
   }catch(err) {
     console.log(err);
     next(err);
