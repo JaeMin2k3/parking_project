@@ -65,7 +65,7 @@ exports.postImageIn = async(req, res, next) => {
     console.log(data.results[0].plate)
     // lấy dữ liệu do bên thứ 3 trả về
     const type = data.results[0].vehicle.type;
-    const plate = data.results[0].plate;
+    const plate = data.results[0].plate?.toUpperCase();
     // check biển số
     if(!plate) return res.status(400).json({
       message: "Không thể xác định được biển số vui lòng chụp lại"
@@ -74,7 +74,7 @@ exports.postImageIn = async(req, res, next) => {
     let vehicleType = "CAR"; 
     if (type === "UNKNOWN") {
       return res.status(400).json({ message: "Không thể xác định loại xe, vui lòng chụp lại" });
-    } else if (type === "MOTORBIKE") {
+    } else if (type === "Motorcycle") {
       vehicleType = "MOTORBIKE";
     } else {
     vehicleType = "CAR";
@@ -104,13 +104,16 @@ exports.postImageIn = async(req, res, next) => {
         where: {id: reservation.id}, transaction
         }
       )
+      const now = new Date().toLocaleDateString('sv-SE');
+      const booked_end = reservation.startBlock + reservation.blockCount;
       const ticket = await model.Ticket.create({
+        date: now,
         reservationId: reservation.id,
         spotId: spotID,
         vehicleType: spot.vehicleType,
-        bookedStart: reservation.booked_start,
-        bookedEnd: reservation.booked_end,
-        startTime: converTime(),
+        bookedStart: reservation.startBlock,
+        bookedEnd: booked_end,
+        startTime: new Date(),
         status: 'active',
         urlCloudinaryCheckIn: uploadResult.secure_url,
         plate: plate,
@@ -124,6 +127,7 @@ exports.postImageIn = async(req, res, next) => {
       }
       // nếu chưa có reservation
     }else{
+      console.log("ko có reservation")
      const spot = await model.Spot.findOne({where: {
         isActive: 1,
         vehicleType: vehicleType,
@@ -135,7 +139,7 @@ exports.postImageIn = async(req, res, next) => {
         date: new Date(),
         status: "CHECKIN",
         ticketType: "off",
-        startTime: new Date(),
+        startTime: currentDate ,
         spotId: spot.id,
         plate: plate,
         channel: 'OFFLINE'
@@ -144,7 +148,7 @@ exports.postImageIn = async(req, res, next) => {
       const uploadResult = await uploadAndCleanup(filePath)
       await model.Spot.update({isActive: false}, {where: {id: spot.id}, transaction})
       await model.Ticket.create({
-        date:date1,
+        date:currentDate,
         area: spot.area,
         position: spot.position,
         vehicleType: spot.vehicleType,

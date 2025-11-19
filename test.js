@@ -40,3 +40,6 @@ VALUES
 ('staff9', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'Nhân viên 9', '2025-11-14', 'staff', 1, NOW(), NOW()),
 ('staff10', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'Nhân viên 10', '2025-11-14', 'staff', 1, NOW(), NOW()),
 ('admin', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'Quản trị viên', '2025-11-14', 'admin', 1, NOW(), NOW());
+
+INSERT INTO `parking_project`.`customer` (`username`, `password_hash`, `gmail`, `role`, `verified`, `status`, `createdAt`, `updatedAt`) VALUES ('0987287665', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'minhsiu9999@gmail.com', 'customer', 0, 1, now(), now());
+INSERT INTO `parking_project`.`reservations` (`id`, `date`, `startBlock`, `blockCount`, `status`, `channel`, `plate`, `vehicleType`, `createdAt`, `updatedAt`, `user_id`, `spotId`) VALUES (1, '2025-11-19', 11, 2, 'CONFIRMED', 'ONLINE', '30N76789', 'MOTORBIKE', now(), now(), '0987287665', 2);

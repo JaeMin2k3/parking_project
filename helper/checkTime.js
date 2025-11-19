@@ -3,8 +3,11 @@ module.exports = async function checkTime(reservation) {
   //Dùng locale của Thụy Điển (sv-SE) để lấy format YYYY-MM-DD tại vì javascript không giống với java hay python có thể format YYYY-MM-DD 
   const currentDate = now.toLocaleDateString('sv-SE');
   const currentTime = now.getHours()+ now.getMinutes()/60;
+  console.log(currentTime + "currentTime")
   if(currentDate === reservation.date){
-    if(currentTime >= reservation.startBlock && currentTime < (reservation.startBlock+reservation.endBlock)){
+    const lastTime = reservation.startBlock + reservation.blockCount;
+    console.log(lastTime);
+    if(currentTime >= reservation.startBlock && currentTime < lastTime){
       return true;
     }
   }
