@@ -56,7 +56,7 @@ exports.postLogin = async (req,res,next) => {
 }
 
 // /staff/ticket-entry
-exports.postImage = async(req, res, next) => {
+exports.postImageIn = async(req, res, next) => {
   try{
     const filePath = req.file.path; // do multer đã gắn thông tin của file chứa ảnh vào req.file, ở trong router
     const data = await platerecognizer(filePath);
@@ -91,7 +91,7 @@ exports.postImage = async(req, res, next) => {
         channel: 'ONLINE'
       }})
     const transaction = await sequelize.transaction();
-    // chưa xử lí reservation đã checkin
+    // nếu reservation tồn tại
     if(reservation){
       const check = await checkTime(reservation);
       if(!check) return res.status(404).json({message: `thời gian bạn đặt xe từ ${reservation.startBlock}h đến ${(reservation.startBlock+ reservation.blockCount)}h. Vui lòng chờ `})
@@ -166,4 +166,10 @@ exports.postImage = async(req, res, next) => {
     console.log(err);
     next(err);
   }
+}
+
+// /staff/free-entry
+
+exports.postImageOut = async(req,res,next) => {
+  
 }

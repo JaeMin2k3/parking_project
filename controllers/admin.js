@@ -13,7 +13,7 @@ exports.postLogin = async(req, res, next) => {
   })
 
   if(admin){ 
-    console.log(admin);
+    // console.log(admin);
     const oke =  await bcrypt.compare(password, admin.password_hash);
     if(oke){
       jwt.sign({id: admin.username, role: admin.role}, process.env.SECRET_KEY, {expiresIn: "24h"},
@@ -58,7 +58,7 @@ exports.getAllStaffs = async (req,res, next) => {
       })
   }catch(err){
     console.log(err);
-    throw(err);
+    next(err);
   }
    
 }
@@ -138,6 +138,7 @@ exports.postNewStaff = async (req,res,next) => {
   try {
     const {name, date, username, password} = req.body;
     console.log(username + "+" + password);
+    if(!name || !date || !username || !password) res.status(400).json({message: "vui lòng nhập đủ các trường dữ liệu"})
     const checkStaff = await model.Staff.findOne({
       where: {username: username}
     })
@@ -159,7 +160,7 @@ exports.postNewStaff = async (req,res,next) => {
     })
   } catch (err) {
     console.log(err);
-    throw(err);
+    next(err);
   }
  
 } 
@@ -179,5 +180,88 @@ exports.getRole = async(req, res, next) => {
       console.log(err);
       res.status(401).json({meseage: "Token không hợp lệ hoặc hết hạn"})
     }
+}
+
+//admin/slot-available
+
+exports.getSlotAvailable = async (req,res,next) => {
+const now = new Date();
+const currentDate = now.toLocaleDateString('sv-SE');
+const hour = now.getHours();
+const mapStatus = await model.Spot.findAll({
+  attributes: ['id', 'area', 'position', 'vehicleType', 'isActive'],
+  include: [
+    {
+      model: model.ReservationBlock,
+      required: false,
+      where: {
+        date: currentDate,
+        blockIndex: hour
+      },
+      include: [
+        {
+          model: model.Reservation,
+          attributes: ['status', 'plate', 'channel']
+        }
+      ]
+    }
+  ]
+})
+// ... Sau khi chạy xong câu lệnh const mapStatus = await model.Spot.findAll(...)
+
+// BƯỚC XỬ LÝ: Biến đổi dữ liệu cho gọn nhẹ
+const formattedData = mapStatus.map(spot => {
+    // 1. Lấy thông tin đặt chỗ (nếu có)
+    // Vì ta đã filter theo giờ nên mảng ReservationBlocks chỉ có tối đa 1 phần tử
+    const bookingInfo = spot.ReservationBlocks && spot.ReservationBlocks[0];
+    const reservation = bookingInfo ? bookingInfo.Reservation : null;
+
+    // 2. Thiết lập mặc định là TRỐNG
+    let statusText = 'AVAILABLE';
+    let colorCode = '#28a745'; // Màu xanh lá (Bootstrap success)
+    let plateNumber = null;
+    let customerType = 'NONE'; // Khách vãng lai hay Online
+
+    // 3. Logic kiểm tra trạng thái
+    if (reservation) {
+        // --- TRƯỜNG HỢP CÓ KHÁCH ONLINE ---
+        plateNumber = reservation.plate;
+        customerType = 'ONLINE';
+
+        if (reservation.status === 'CONFIRMED') {
+            statusText = 'BOOKED'; // Đã đặt - Chờ đến
+            colorCode = '#ffc107'; // Màu vàng (Bootstrap warning)
+        } else if (reservation.status === 'CHECKIN') {
+            statusText = 'OCCUPIED'; // Đang đỗ
+            colorCode = '#dc3545'; // Màu đỏ (Bootstrap danger)
+        }
+    } else {
+        // --- TRƯỜNG HỢP KHÔNG CÓ ONLINE -> CHECK OFFLINE ---
+        // Nếu isActive = false (hoặc 0) nghĩa là đang có xe vãng lai chiếm chỗ
+        if (!spot.isActive) {
+             statusText = 'OCCUPIED';
+             colorCode = '#dc3545'; // Màu đỏ
+        }
+    }
+
+    // 4. Trả về object gọn gàng
+    return {
+        id: spot.id,
+        area: spot.area,
+        position: spot.position,
+        vehicleType: spot.vehicleType, // CAR hoặc MOTORBIKE (để hiện icon)
+        status: statusText,            // AVAILABLE / BOOKED / OCCUPIED
+        color: colorCode,              // Mã màu hex để tô nền
+        plate: plateNumber,            // Biển số (nếu có)
+        channel: customerType     // ONLINE / OFFLINE / NONE
+    };
+});
+
+// Trả về kết quả đã làm đẹp
+res.status(200).json({
+    message: "success",
+    mapStatus: formattedData
+});
+
 }
 
