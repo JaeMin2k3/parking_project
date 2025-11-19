@@ -10,7 +10,7 @@ router.get('/staffs', validateAdmin, controllerAdmin.getAllStaffs);
 router.get('/staff/:id',validateAdmin, controllerAdmin.getStaff);
 router.post('/edit/:idStaff',validateAdmin, controllerAdmin.postEditStaff);
 router.post('/delete/:idStaff',validateAdmin, controllerAdmin.postDeleteStaff);
-
+router.get('/slot-available',controllerAdmin.getSlotAvailable)
 router.get('/auth/token', controllerAdmin.getRole);
 
 module.exports = router;

@@ -1,3 +1,7 @@
-const currentDate = new Date().toLocaleDateString('sv-SE');
+const now = new Date();
+console.log(now);
+const currentDate = now.toLocaleDateString('sv-SE');
+const hour = now.getHours();
+console.log(hour);
 console.log(currentDate);
   

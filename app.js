@@ -3,7 +3,8 @@ const app = express();
 const bodyParser = require('body-parser');
 const sequelize = require('./config/database');
 const cors = require('cors');
-app.use(cors);
+
+app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false })); 
 
@@ -20,8 +21,7 @@ const models = require('./models/index');
 
 const routerAdmin = require('./routers/admin');
 const routerUser = require('./routers/user');
-const routerStaff = require('./routers/staff')
-
+const routerStaff = require('./routers/staff');
 
 
 //
@@ -35,7 +35,12 @@ app.use((err, req, res, next) => {
 });
 
 sequelize.sync().then(result => {
-  app.listen(port);
+  const server = app.listen(port);
+  const io = require('./socket').init(server);
+  io.on('connection', socket => {
+    console.log('Client connected');
+  })
+ 
 }).catch(err => {
   console.log(err);
 });

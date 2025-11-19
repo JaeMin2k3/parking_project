@@ -74,5 +74,6 @@ module.exports = {
   Payment,
   Bill,
   UserVerify,
-  UserReset
+  UserReset, 
+  ReservationBlock
 };
