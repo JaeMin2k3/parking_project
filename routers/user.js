@@ -15,4 +15,6 @@ router.get('/infor', controllerUser.getInfor);
 
 router.post('/send-barcode', controllerUser.postBarCode);
 router.post('/forget-password', controllerUser.postForgetPw);
+
+router.post('/reservations/create-with-payment', TokenVerify, controllerUser.postReservationWithPayment);
 module.exports = router;

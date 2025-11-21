@@ -22,12 +22,13 @@ const models = require('./models/index');
 const routerAdmin = require('./routers/admin');
 const routerUser = require('./routers/user');
 const routerStaff = require('./routers/staff');
-
+const routerPayment = require('./routers/payment');
 
 //
 app.use('/user', routerUser);
 app.use('/admin', routerAdmin);
 app.use('/staff', routerStaff);
+app.use('/payment', routerPayment);
 
 app.use((err, req, res, next) => {
   console.error(err);
