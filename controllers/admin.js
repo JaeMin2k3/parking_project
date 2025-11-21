@@ -185,9 +185,10 @@ exports.getRole = async(req, res, next) => {
 //admin/slot-available
 
 exports.getSlotAvailable = async (req,res,next) => {
-const now = new Date();
-const currentDate = now.toLocaleDateString('sv-SE');
-const hour = now.getHours();
+let dateTime = new Date().toLocaleString("sv-SE");
+const date = dateTime.split(" ")[0];
+const hour = dateTime.split(" ")[1];
+const tineEven = hour.split(":")[0];
 const mapStatus = await model.Spot.findAll({
   attributes: ['id', 'area', 'position', 'vehicleType', 'isActive'],
   include: [
@@ -195,8 +196,8 @@ const mapStatus = await model.Spot.findAll({
       model: model.ReservationBlock,
       required: false,
       where: {
-        date: currentDate,
-        blockIndex: hour
+        date: date,
+        blockIndex:tineEven
       },
       include: [
         {
