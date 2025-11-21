@@ -2,7 +2,7 @@ const sequelize  = require('../config/database');
 
 const Staff = require('./Staff')(sequelize);
 const Spot  = require('./Spot')(sequelize);
-const ParkingFee = require('./ParkingRate')(sequelize);
+const ParkingRate = require('./ParkingRate')(sequelize);
 const Reservation = require('./Reservation')(sequelize);
 const Ticket = require('./Ticket')(sequelize);
 const Payment = require('./Payment')(sequelize);
@@ -68,7 +68,7 @@ module.exports = {
   Staff,
   Customer,
   Spot,
-  ParkingFee,
+  ParkingRate,
   Reservation,
   Ticket,
   Payment,

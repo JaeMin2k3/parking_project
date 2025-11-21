@@ -18,7 +18,7 @@ module.exports = (sequelize) => {
   , {
   tableName: 'reservations',
   index: [
-    {unique: true, fields: ['date', 'startBlock']},
+    {unique: true, fields: ['date', 'startBlock', 'plate', 'vehicleType']},
     {fields: ['date', 'vehicleType', 'channel']},
     {fields: ['date', 'vehicleType', 'plate', 'status']}
   ]

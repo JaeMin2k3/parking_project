@@ -13,6 +13,7 @@ const fs = require('fs')
 const sequelize = require('../config/database');
 const converTime = require('../helper/converTime');
 const uploadAndCleanup = require('../helper/uploadAndCleanup');
+const { channel } = require('diagnostics_channel');
 
 
 
@@ -30,7 +31,7 @@ exports.postLogin = async (req,res,next) => {
     const oke = await bcrypt.compare(password, staff.password_hash);
     console.log(oke)
     if(oke){
-      jwt.sign({_id: staff.username, role: staff.role}, process.env.SECRET_KEY, {expiresIn: "24h"},
+      jwt.sign({id: staff.username, role: staff.role}, process.env.SECRET_KEY, {expiresIn: "24h"},
       (err,token) => {
         if(err){
           console.log(err);
@@ -91,6 +92,7 @@ exports.postImageIn = async(req, res, next) => {
         channel: 'ONLINE'
       }})
     const transaction = await sequelize.transaction();
+    const booked_end = reservation.startBlock + reservation.blockCount;
     // nếu reservation tồn tại
     if(reservation){
       const check = await checkTime(reservation);
@@ -104,16 +106,15 @@ exports.postImageIn = async(req, res, next) => {
         where: {id: reservation.id}, transaction
         }
       )
-      const now = new Date().toLocaleDateString('sv-SE');
-      const booked_end = reservation.startBlock + reservation.blockCount;
+      
       const ticket = await model.Ticket.create({
-        date: now,
+        date: currentDate,
         reservationId: reservation.id,
         spotId: spotID,
         vehicleType: spot.vehicleType,
         bookedStart: reservation.startBlock,
         bookedEnd: booked_end,
-        startTime: new Date(),
+        startTime: now,
         status: 'active',
         urlCloudinaryCheckIn: uploadResult.secure_url,
         plate: plate,
@@ -152,7 +153,7 @@ exports.postImageIn = async(req, res, next) => {
         area: spot.area,
         position: spot.position,
         vehicleType: spot.vehicleType,
-        startTime: new Date(),
+        startTime: now,
         status: "active",
         spotId: spot.id,
         urlCloudinaryCheckIn: uploadResult.secure_url,
@@ -175,5 +176,113 @@ exports.postImageIn = async(req, res, next) => {
 // /staff/free-entry
 
 exports.postImageOut = async(req,res,next) => {
-  
+  try {
+    const filePath = req.file.path;
+    const data = await platerecognizer(filePath);
+    // lấy dữ liệu
+    const type = data.results[0].vehicle.type;
+    const plate = data.results[0].plate?.toUpperCase();
+    if(!type || !plate) res.status(400).json({message: "không thể xác định được loại xe hoặc biển số vui lòng chụp lại"});
+    let vehicleType = 'CAR';
+    if(type === "Motorcycle"){
+      vehicleType = "MOTORBIKE";
+    }
+
+    const check = await model.Ticket.findOne({where: {
+      plate: plate,
+      vehicleType: type,
+      status: 'active'
+    }})
+    if(!check) return res.status(404).json({message: "không tìm thấy xe này"});
+    const mapTicket = await model.Ticket.findOne({
+      include: [
+        {
+          model: model.Reservation,
+          attributes: ['channel', 'vehicleType'],
+          where: {
+            plate: plate,
+            vehicleType: type,
+            status: 'CHECKIN'
+          }
+        ,
+        include: [
+          {
+            require: false,
+            model: model.Payment,
+            attributes: [
+                'cost_parking', 'currency'
+            ],
+            where: {
+              status: 'SUCCEEDED',
+            }
+          }
+        ],
+      }
+      ]
+    })
+      const reservation = mapTicket.Reservation;
+      const payment = reservation ? reservation.Payment : null;
+      let costParking = null;
+      let currency = null;
+      if(payment){
+        costParking = payment.cost_parking;
+        currency = payment.currency;
+      }
+      const NewTicket = {
+        id: mapTicket.id,
+        reservationId: mapTicket.reservationId,
+        spotId: mapTicket.spotId,
+        date: mapTicket.date,
+        plate: mapTicket.plate,
+        vehicleType: mapTicket.vehicleType,
+        bookedStart: mapTicket.bookedStart,
+        bookedEnd: mapTicket.bookedEnd,
+        startTime: mapTicket.startTime,
+        finishTime: mapTicket.finishTime,
+        urlCloudinaryCheckIn: mapTicket.urlCloudinaryCheckIn,
+        urlCloudinaryCheckOut: mapTicket.urlCloudinaryCheckOut, 
+        vehicleTypeReservation: reservation.vehicleType,
+        channel: reservation.channel,
+        costParking: costParking,
+        currency: currency
+      }
+      if(NewTicket.vehicleType === NewTicket.vehicleTypeReservation){
+        if(bookedStart === null){
+          const ParkingRate = model.ParkingRate.findOne({where: {vehicleType: NewTicket.vehicleType}});
+          
+        }
+      }
+      
+    
+  } catch (error) {
+    console.log(error);
+    next(error);
+  }
+}
+
+// /staff/infor
+exports.getInfor = async (req,res,next) =>{
+  try {
+  const token = req.headers.authorization || req.headers.Authorization;
+  let decode;
+  try {
+    decode = jwt.verify(token, process.env.SECRET_KEY);
+  } catch (err) {
+      return res.status(401).json({ message: "Token không hợp lệ hoặc đã hết hạn" });
+  }
+  const username = decode.id;
+  const staff = await model.Staff.findByPk(username, {
+    attributes: ['username', 'role'],
+    raw: true,
+  });
+
+  if(!staff) return res.status(404).json({message: "user không tồn tại"});
+  return res.status(200).json({
+    message: "success",
+    staff: staff
+  })
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({message: "lỗi server"});
+  }
 }

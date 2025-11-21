@@ -201,58 +201,55 @@ const mapStatus = await model.Spot.findAll({
       include: [
         {
           model: model.Reservation,
-          attributes: ['status', 'plate', 'channel']
+          attributes: ['status', 'channel', 'plate']
         }
       ]
     }
   ]
 })
+
+
 // ... Sau khi chạy xong câu lệnh const mapStatus = await model.Spot.findAll(...)
 
 // BƯỚC XỬ LÝ: Biến đổi dữ liệu cho gọn nhẹ
 const formattedData = mapStatus.map(spot => {
     // 1. Lấy thông tin đặt chỗ (nếu có)
     // Vì ta đã filter theo giờ nên mảng ReservationBlocks chỉ có tối đa 1 phần tử
-    const bookingInfo = spot.ReservationBlocks && spot.ReservationBlocks[0];
+    const bookingInfo = spot.ReservationBlocks[0];
     const reservation = bookingInfo ? bookingInfo.Reservation : null;
 
     // 2. Thiết lập mặc định là TRỐNG
     let statusText = 'AVAILABLE';
     let colorCode = '#28a745'; // Màu xanh lá (Bootstrap success)
-    let plateNumber = null;
     let customerType = 'NONE'; // Khách vãng lai hay Online
 
-    // 3. Logic kiểm tra trạng thái
+    // khách đặt online
     if (reservation) {
-        // --- TRƯỜNG HỢP CÓ KHÁCH ONLINE ---
-        plateNumber = reservation.plate;
         customerType = 'ONLINE';
-
+        // đã đặt chỗ chưa checkin
         if (reservation.status === 'CONFIRMED') {
-            statusText = 'BOOKED'; // Đã đặt - Chờ đến
-            colorCode = '#ffc107'; // Màu vàng (Bootstrap warning)
+            statusText = 'BOOKED'; 
+            colorCode = '#ffc107'; 
+        // đặt chỗ và checkIn rồi
         } else if (reservation.status === 'CHECKIN') {
-            statusText = 'OCCUPIED'; // Đang đỗ
-            colorCode = '#dc3545'; // Màu đỏ (Bootstrap danger)
+            statusText = 'OCCUPIED'; 
+            colorCode = '#dc3545'; 
         }
     } else {
-        // --- TRƯỜNG HỢP KHÔNG CÓ ONLINE -> CHECK OFFLINE ---
-        // Nếu isActive = false (hoặc 0) nghĩa là đang có xe vãng lai chiếm chỗ
+      // không đặt online, dựa vào trạng thái của ghế để check khách đến trực tiếp nếu khoá thì đã đỗ còn chưa thì xanh
         if (!spot.isActive) {
              statusText = 'OCCUPIED';
-             colorCode = '#dc3545'; // Màu đỏ
+             colorCode = '#dc3545'; 
         }
     }
 
-    // 4. Trả về object gọn gàng
     return {
         id: spot.id,
         area: spot.area,
         position: spot.position,
-        vehicleType: spot.vehicleType, // CAR hoặc MOTORBIKE (để hiện icon)
+        vehicleType: spot.vehicleType, // CAR hoặc MOTORBIKE 
         status: statusText,            // AVAILABLE / BOOKED / OCCUPIED
         color: colorCode,              // Mã màu hex để tô nền
-        plate: plateNumber,            // Biển số (nếu có)
         channel: customerType     // ONLINE / OFFLINE / NONE
     };
 });
@@ -265,3 +262,29 @@ res.status(200).json({
 
 }
 
+// /admin/infor
+exports.getInfor = async (req,res,next) =>{
+  try {
+  const token = req.headers.authorization || req.headers.Authorization;
+  let decode;
+  try {
+    decode = jwt.verify(token, process.env.SECRET_KEY);
+  } catch (err) {
+      return res.status(401).json({ message: "Token không hợp lệ hoặc đã hết hạn" });
+  }
+  const username = decode.id;
+  const admin = await model.Staff.findByPk(username, {
+      attributes: ['username', 'role'],
+      raw: true,
+    });
+
+  if(!admin) return res.status(404).json({message: "user không tồn tại"});
+  return res.status(200).json({
+    message: "success",
+    admin: admin
+  })
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({message: "lỗi server"});
+  }
+}
