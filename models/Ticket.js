@@ -17,6 +17,10 @@ module.exports = (sequelize) => {
     urlCloudinaryCheckOut: {type: DataTypes.STRING(100), allowNull: true}
   }, {
     tableName: 'tickets',
+    index: [
+      {unique: true, fields: ['plate', 'vehicleType']},
+      {fields: ['plate', 'vehicleType', 'status']}
+    ]
   });
 
   return Ticket;

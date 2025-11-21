@@ -10,11 +10,10 @@ const storge = multer.diskStorage({
     cb(null, new Date().toISOString + '-' + file.filename);
   }
 })
-
-
 const upload = multer({storage: storge});
-Router.post('/login', controllerStaff.postLogin);
 
+Router.post('/login', controllerStaff.postLogin);
+Router.get('/infor', controllerStaff.getInfor);
 Router.post('/ticket-entry',upload.single("image"), controllerStaff.postImageIn);
-// Router.post('/free-endtry',upload.single("image"), controllerStaff.postImageOut)
+Router.post('/free-endtry',upload.single("image"), controllerStaff.postImageOut);
 module.exports = Router

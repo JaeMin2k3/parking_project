@@ -103,10 +103,6 @@ exports.postSign = async (req, res) => {
         });
       });
     });
-
-    // if (process.env.NODE_ENV !== 'production') {
-    //   return res.status(200).json({ message: 'Tạo tài khoản thành công. Kiểm tra email để xác minh.', verifyLink });
-    // }
     return res.status(200).json({ message: 'Tạo tài khoản thành công. Kiểm tra email để xác minh.' });
   } catch (err) {
     console.error(err);
@@ -209,7 +205,7 @@ exports.postVerifyEmail = async (req, res, next) => {
   }
 };
 
-
+// /user/infor
 exports.getInfor = async (req,res,next) =>{
   try {
   const token = req.headers.authorization || req.headers.Authorization;
@@ -220,11 +216,7 @@ exports.getInfor = async (req,res,next) =>{
       return res.status(401).json({ message: "Token không hợp lệ hoặc đã hết hạn" });
   }
   const username = decode.id;
-  const user = await model.Customer.findByPk({
-    where: {username: username},
-    attribute: ["username", "gmail", "verify"],
-    raw: true
-  })
+  const user = await model.Customer.findByPk(username);
 
   if(!user) return res.status(404).json({message: "user không tồn tại"});
   return res.status(200).json({

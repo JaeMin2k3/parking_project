@@ -12,5 +12,5 @@ router.post('/edit/:idStaff',validateAdmin, controllerAdmin.postEditStaff);
 router.post('/delete/:idStaff',validateAdmin, controllerAdmin.postDeleteStaff);
 router.get('/slot-available',controllerAdmin.getSlotAvailable)
 router.get('/auth/token', controllerAdmin.getRole);
-
+router.get('/infor', controllerAdmin.getInfor);
 module.exports = router;
