@@ -28,14 +28,14 @@ const routerPayment = require('./routers/payment');
 app.use('/user', routerUser);
 app.use('/admin', routerAdmin);
 app.use('/staff', routerStaff);
-app.use('/payment', routerPayment);
+// app.use('/payment', routerPayment);
 
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(err.status || 500).json({ message: err.message || 'Internal error' });
 });
 
-sequelize.sync().then(result => {
+sequelize.sync({force: true}).then(result => {
   const server = app.listen(port);
   const io = require('./socket').init(server);
   io.on('connection', socket => {

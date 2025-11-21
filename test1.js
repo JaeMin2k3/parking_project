@@ -1,7 +1,8 @@
- const now = new Date();
-  //Dùng locale của Thụy Điển (sv-SE) để lấy format YYYY-MM-DD tại vì javascript không giống với java hay python có thể format YYYY-MM-DD 
-    const currentDate = now.toLocaleDateString('sv-SE');
-const hour = now.getHours();
+let dateTime = new Date().toLocaleString("sv-SE");
+console.log(dateTime)
+const date = dateTime.split(" ")[0];
+const hour = dateTime.split(" ")[1];
+const tineEven = hour.split(":")[0];
 console.log(hour);
-console.log(currentDate);
-  
+console.log(date);
+console.log(tineEven);
