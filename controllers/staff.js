@@ -13,6 +13,7 @@ const fs = require('fs')
 const sequelize = require('../config/database');
 const converTime = require('../helper/converTime');
 const uploadAndCleanup = require('../helper/uploadAndCleanup');
+const { channel } = require('diagnostics_channel');
 
 
 
@@ -63,11 +64,13 @@ exports.postImageIn = async(req, res, next) => {
     const hour = dateTime.split(" ")[1];
     const tineEven = hour.split(":")[0];
     const filePath = req.file.path; // do multer đã gắn thông tin của file chứa ảnh vào req.file, ở trong router
-    const data = await platerecognizer(filePath);
-    console.log(data)
-    console.log(data.results[0].vehicle.type);
-    console.log(data.results[0].plate)
+    const plateTask = platerecognizer(filePath);
+    const uploadTask = uploadAndCleanup(filePath);
+    // console.log(data)
+    // console.log(data.results[0].vehicle.type);
+    // console.log(data.results[0].plate)
     // lấy dữ liệu do bên thứ 3 trả về
+    const data = await plateTask;
     const type = data.results[0].vehicle.type;
     const plate = data.results[0].plate?.toUpperCase();
     // check biển số
@@ -93,7 +96,17 @@ exports.postImageIn = async(req, res, next) => {
         channel: 'ONLINE'
       }})
     const transaction = await sequelize.transaction();
-    
+    // check xem xe có trong bãi chưa
+    const checkVehicle = await model.Ticket.findOne({where: {
+      plate: plate,
+      vehicleType: vehicleType,
+      status: 'active'
+    }, transaction});
+    if(checkVehicle) {
+      transaction.rollback();
+      return res.status(404).json({message: "xe đã ở trong bãi"})
+    }
+    // console.log(checkVehicle);
     // nếu reservation tồn tại
     if(reservation){
       const booked_end = reservation.startBlock + reservation.blockCount;
@@ -101,7 +114,7 @@ exports.postImageIn = async(req, res, next) => {
       if(!check) return res.status(404).json({message: `thời gian bạn đặt xe từ ${reservation.startBlock}h đến ${(reservation.startBlock+ reservation.blockCount)}h. Vui lòng chờ `})
       const spotID = reservation.spotId;
       const spot = await model.Spot.findOne({where: {id: spotID}, transaction});
-      const uploadResult = await uploadAndCleanup(filePath)
+      const uploadResult = await uploadTask;
       await model.Reservation.update(
         {status: 'CHECKIN'},
         {
@@ -137,7 +150,7 @@ exports.postImageIn = async(req, res, next) => {
         slotType: "OFFLINE"
       }, transaction});
       if(!spot) return res.status(400).json({message: "slot full"})
-      console.log(spot);
+      // console.log(spot);
       const reservation = await model.Reservation.create( {
         date: date,
         status: "CHECKIN",
@@ -145,10 +158,11 @@ exports.postImageIn = async(req, res, next) => {
         startTime: dateTime ,
         spotId: spot.id,
         plate: plate,
-        channel: 'OFFLINE'
+        channel: 'OFFLINE',
+        vehicleType: vehicleType,
       },{transaction})
-      console.log(reservation);
-      const uploadResult = await uploadAndCleanup(filePath)
+      // console.log(reservation);
+      const uploadResult = await uploadTask;
       await model.Spot.update({isActive: false}, {where: {id: spot.id}, transaction})
       await model.Ticket.create({
         date:date,
@@ -177,18 +191,22 @@ exports.postImageIn = async(req, res, next) => {
 
 // /staff/free-entry
 exports.postImageOut = async(req,res,next) => {
+  // tạo 1 phiên giao 
+  const transaction = await sequelize.transaction();
   try {
     let dateTime = new Date().toLocaleString("sv-SE");
     const date = dateTime.split(" ")[0];
     const hour = dateTime.split(" ")[1];
     const tineEven = hour.split(":")[0];
-    // tạo 1 phiên giao 
-    const transaction = await sequelize.transaction();
+    
     const filePath = req.file.path;
-    const data = await platerecognizer(filePath);
+    const plateTask = platerecognizer(filePath);
+    const uploadTask = uploadAndCleanup(filePath);
     // lấy dữ liệu
+    const data = await plateTask;
     const type = data.results[0].vehicle.type;
     const plate = data.results[0].plate?.toUpperCase();
+    console.log(type + " "+ plate)
     if(!type || !plate) {
       transaction.rollback();
       return res.status(400).json({message: "không thể xác định được loại xe hoặc biển số vui lòng chụp lại"});
@@ -197,6 +215,7 @@ exports.postImageOut = async(req,res,next) => {
     if(type === "Motorcycle"){
       vehicleType = "MOTORBIKE";
     }
+    console.log(vehicleType);
     // join 3 bảng ticket- reservation - payment để tính tiền
     const mapTicket = await model.Ticket.findOne({
       include: [
@@ -222,15 +241,17 @@ exports.postImageOut = async(req,res,next) => {
           }
         ],
       }],transaction} );
+      console.log(mapTicket);
     if(!mapTicket) {
       transaction.rollback();
       return res.status(404).json({message: "không tìm thấy phương tiện này"});
     }
-    // đây ảnh lên cloud
-    const uploadResult = await uploadAndCleanup(filePath);
+      
     // lấy reservation và payment trong mapTicket
       const reservation = mapTicket.Reservation;
       const payment = reservation ? reservation.Payment : null;
+      console.log(reservation);
+      console.log(payment);
       let totalPrice = 0;
       const parkingRate = await model.ParkingRate.findOne({where: {vehicleType:vehicleType }, transaction}) ;
       let payedMoney = 0;
@@ -264,6 +285,7 @@ exports.postImageOut = async(req,res,next) => {
           totalPrice = hours*parkingRate.unitPrice;
           await model.Spot.update({isActive: true}, {where: {id: mapTicket.spotId}, transaction});
       }
+      const uploadResult = await uploadTask;
       const bill = await model.Bill.create({
         channel: mapTicket.channel,
         payedMoney: payedMoney,
@@ -271,35 +293,28 @@ exports.postImageOut = async(req,res,next) => {
         finishTime: dateTime,
         totalPrice: totalPrice,
         urlCloudinaryCheckIn: mapTicket.urlCloudinaryCheckIn,
-        urlCloudinaryCheckOut: uploadResult.secure_url
+        urlCloudinaryCheckOut: uploadResult.secure_url,
+        channel: reservation.channel
       }, {transaction});
       if(!bill) {
         transaction.rollback();
         return res.status(500).json({message: "lỗi server không thể tạo bill"})      
       }
-    // update ticket
-      const updateTicket = await model.Ticket.update({
-        finishTime: dateTime,
-        status: 'inactive',
-      },{
-        where: {id: mapTicket.id}, transaction
-      })
-      if(!updateTicket) return res.json(500).json({message: "lỗi server không thể thực hiện cập nhật ticket"});
-      //update reservation
-      const updateReservation = await model.Reservation.update({
-        status: 'CHECKOUT'
-      },{
-        where: {id: mapTicket.reservationId}
-      })
-      if(!updateReservation){
-        transaction.rollback();
-        return res.status(500).json({message: "lỗi server không thể update Reservartion"});
-      }
+
+      await Promise.all([
+        await model.Ticket.update({finishTime: dateTime,status: 'inactive',},
+        {where: {id: mapTicket.id}, transaction}),
+        await model.Reservation.update({status: 'CHECKOUT'},
+        {where: {id: mapTicket.reservationId}})
+      ])
       await transaction.commit();
-      return res.status(200).json({
+      const billResponse = bill.toJSON();
+      billResponse.startTime = new Date(bill.startTime).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+      billResponse.finishTime = new Date(bill.finishTime).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+       return res.status(200).json({
         message: "success",
-        bill: bill,
-      })
+        bill: billResponse, 
+      });
   } catch (error) {
     console.log(error);
     transaction.rollback();

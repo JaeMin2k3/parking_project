@@ -35,7 +35,7 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ message: err.message || 'Internal error' });
 });
 
-sequelize.sync({force: true}).then(result => {
+sequelize.sync().then(result => {
   const server = app.listen(port);
   const io = require('./socket').init(server);
   io.on('connection', socket => {
