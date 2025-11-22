@@ -19,9 +19,10 @@ module.exports = (sequelize) => {
   tableName: 'reservations',
   index: [
     {unique: true, fields: ['date', 'startBlock', 'plate', 'vehicleType']},
-    {fields: ['date', 'vehicleType', 'channel']},
-    {fields: ['date', 'vehicleType', 'plate', 'status']}
-  ]
+    // Thứ tự ưu tiên: plate (định danh duy nhất) -> status -> date
+    {fields: ['plate', 'status', 'date']},
+    // Index hỗ trợ tìm kiếm check-out (lúc này status là CHECKIN)
+    {fields: ['plate', 'vehicleType']}]
   },
  
 );

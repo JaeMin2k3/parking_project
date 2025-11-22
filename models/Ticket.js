@@ -13,12 +13,15 @@ module.exports = (sequelize) => {
     startTime: { type: DataTypes.DATE, allowNull: false },
     finishTime: {type: DataTypes.DATE, allowNull:true},
     status: {type: DataTypes.ENUM('active','inactive'), allowNull: false, default: 'active'},
-    urlCloudinaryCheckIn: {type: DataTypes.STRING(100), allowNull: false}
+    urlCloudinaryCheckIn: {type: DataTypes.STRING(100), allowNull: false},
   }, {
     tableName: 'tickets',
     index: [
-      {unique: true, fields: ['plate', 'vehicleType']},
-      {fields: ['plate', 'vehicleType', 'status']}
+      {fields: ['plate', 'vehicleType', 'status']},
+      // Giúp query tìm xe đang "active" cực nhanh
+      {fields: ['plate', 'status']},
+      // Nếu bạn thường xuyên thống kê doanh thu theo ngày
+      {fields: ['date']}
     ]
   });
 

@@ -43,3 +43,8 @@ VALUES
 
 INSERT INTO `parking_project`.`customer` (`username`, `password_hash`, `gmail`, `role`, `verified`, `status`, `createdAt`, `updatedAt`) VALUES ('0987287665', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'minhsiu9999@gmail.com', 'customer', 0, 1, now(), now());
 INSERT INTO `parking_project`.`reservations` (`id`, `date`, `startBlock`, `blockCount`, `status`, `channel`, `plate`, `vehicleType`, `createdAt`, `updatedAt`, `user_id`, `spotId`) VALUES (1, '2025-11-19', 11, 2, 'CONFIRMED', 'ONLINE', '30N76789', 'MOTORBIKE', now(), now(), '0987287665', 2);
+
+INSERT INTO parkingrate (vehicleType, currency, unitPrice, createdAt, updatedAt) 
+VALUES 
+('CAR', 'VND', 10000, NOW(), NOW()),
+('MOTORBIKE', 'VND', 5000, NOW(), NOW());

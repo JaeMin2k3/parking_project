@@ -210,13 +210,11 @@ const mapStatus = await model.Spot.findAll({
 })
 
 
-// ... Sau khi chạy xong câu lệnh const mapStatus = await model.Spot.findAll(...)
-
-// BƯỚC XỬ LÝ: Biến đổi dữ liệu cho gọn nhẹ
+// format dữ liệu trả về
 const formattedData = mapStatus.map(spot => {
     // 1. Lấy thông tin đặt chỗ (nếu có)
     // Vì ta đã filter theo giờ nên mảng ReservationBlocks chỉ có tối đa 1 phần tử
-    const bookingInfo = spot.ReservationBlocks[0];
+    const bookingInfo = spot.ReservationBlocks;
     const reservation = bookingInfo ? bookingInfo.Reservation : null;
 
     // 2. Thiết lập mặc định là TRỐNG
