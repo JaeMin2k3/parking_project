@@ -59,6 +59,7 @@ exports.postLogin = async (req,res,next) => {
 // /staff/ticket-entry
 exports.postImageIn = async(req, res, next) => {
   try{
+    const username = req.username;
     let dateTime = new Date().toLocaleString("sv-SE");
     const date = dateTime.split(" ")[0];
     const hour = dateTime.split(" ")[1];
@@ -117,9 +118,7 @@ exports.postImageIn = async(req, res, next) => {
       const uploadResult = await uploadTask;
       await model.Reservation.update(
         {status: 'CHECKIN'},
-        {
-        where: {id: reservation.id}, transaction
-        }
+        {where: {id: reservation.id}, transaction}
       )
       
       const ticket = await model.Ticket.create({
@@ -133,6 +132,7 @@ exports.postImageIn = async(req, res, next) => {
         status: 'active',
         urlCloudinaryCheckIn: uploadResult.secure_url,
         plate: plate,
+        staffUsername: req.username
       }, {transaction})
       await transaction.commit(); 
       if(ticket){
@@ -174,7 +174,8 @@ exports.postImageIn = async(req, res, next) => {
         spotId: spot.id,
         urlCloudinaryCheckIn: uploadResult.secure_url,
         plate: plate,
-        reservationId: reservation.id
+        reservationId: reservation.id,
+        staffUsername: req.username
       }, {transaction})
       await transaction.commit(); 
       res.status(200).json({
@@ -258,15 +259,15 @@ exports.postImageOut = async(req,res,next) => {
       if(payment){
           payedMoney = payment.costParking;
           currency = payment.currency;
-          if(reservation.channel === 'OFFLINE'){
-          const start = mapTicket.startTime;
-          const end = new Date(dateTime)
-          const diffInMillis = end - start;
-          // Đổi ra giờ 
-          const hours = diffInMillis / (1000 * 60 * 60);
-          totalPrice = hours*parkingRate.unitPrice - payedMoney;
-          await model.Spot.update({isActive: true}, {where: {id: mapTicket.spotId}, transaction})
-          }else{
+      //     if(reservation.channel === 'OFFLINE'){
+      //     const start = mapTicket.startTime;
+      //     const end = new Date(dateTime)
+      //     const diffInMillis = end - start;
+      //     // Đổi ra giờ 
+      //     const hours = diffInMillis / (1000 * 60 * 60);
+      //     totalPrice = hours*parkingRate.unitPrice - payedMoney;
+      //     await model.Spot.update({isActive: true}, {where: {id: mapTicket.spotId}, transaction})
+      //     }else{
           payedMoney = payment.costParking;
           const start = mapTicket.startTime;
           const end = new Date(dateTime)
@@ -275,7 +276,7 @@ exports.postImageOut = async(req,res,next) => {
           const hours = diffInMillis / (1000 * 60 * 60);
           totalPrice = hours*parkingRate.unitPrice - payedMoney;
           if(totalPrice < 0) totalPrice = 0;
-      }
+      // }
       }else{
           const start = new Date(mapTicket.startTime);
           const end = new Date(dateTime)
@@ -324,27 +325,14 @@ exports.postImageOut = async(req,res,next) => {
 
 // /staff/infor
 exports.getInfor = async (req,res,next) =>{
-  try {
-  const token = req.headers.authorization || req.headers.Authorization;
-  let decode;
-  try {
-    decode = jwt.verify(token, process.env.SECRET_KEY);
-  } catch (err) {
-      return res.status(401).json({ message: "Token không hợp lệ hoặc đã hết hạn" });
-  }
-  const username = decode.id;
-  const staff = await model.Staff.findByPk(username, {
-    attributes: ['username', 'role'],
-    raw: true,
-  });
+  console.log(req.username)
+  const staff = await model.Staff.findByPk(
+    req.username,{attributes: ['username', 'name', 'date', 'role']}
+  );
 
   if(!staff) return res.status(404).json({message: "user không tồn tại"});
   return res.status(200).json({
     message: "success",
     staff: staff
   })
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({message: "lỗi server"});
-  }
 }

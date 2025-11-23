@@ -209,9 +209,12 @@ const mapStatus = await model.Spot.findAll({
   ]
 })
 
-
+let availableSpot = 0;
+let bookedSpot = 0;
+let occupiedSpot = 0;
 // format dữ liệu trả về
 const formattedData = mapStatus.map(spot => {
+  let check = 0;
     // 1. Lấy thông tin đặt chỗ (nếu có)
     // Vì ta đã filter theo giờ nên mảng ReservationBlocks chỉ có tối đa 1 phần tử
     const bookingInfo = spot.ReservationBlocks;
@@ -229,19 +232,24 @@ const formattedData = mapStatus.map(spot => {
         if (reservation.status === 'CONFIRMED') {
             statusText = 'BOOKED'; 
             colorCode = '#ffc107'; 
+            check = -1;
         // đặt chỗ và checkIn rồi
         } else if (reservation.status === 'CHECKIN') {
             statusText = 'OCCUPIED'; 
             colorCode = '#dc3545'; 
+            check = 1;
         }
     } else {
       // không đặt online, dựa vào trạng thái của ghế để check khách đến trực tiếp nếu khoá thì đã đỗ còn chưa thì xanh
         if (!spot.isActive) {
              statusText = 'OCCUPIED';
              colorCode = '#dc3545'; 
+             check = 1
         }
     }
-
+    if(check === 0) availableSpot ++;
+    if(check === 1) occupiedSpot ++;
+    if(check === -1) bookedSpot ++;
     return {
         id: spot.id,
         area: spot.area,
@@ -256,34 +264,23 @@ const formattedData = mapStatus.map(spot => {
 // Trả về kết quả đã làm đẹp
 res.status(200).json({
     message: "success",
-    mapStatus: formattedData
+    mapStatus: formattedData,
+    availableSlot: availableSpot,
+    occupiedSlot: occupiedSpot,
+    bookedSlot: bookedSpot
 });
 
 }
 
 // /admin/infor
 exports.getInfor = async (req,res,next) =>{
-  try {
-  const token = req.headers.authorization || req.headers.Authorization;
-  let decode;
-  try {
-    decode = jwt.verify(token, process.env.SECRET_KEY);
-  } catch (err) {
-      return res.status(401).json({ message: "Token không hợp lệ hoặc đã hết hạn" });
-  }
-  const username = decode.id;
-  const admin = await model.Staff.findByPk(username, {
-      attributes: ['username', 'role'],
-      raw: true,
-    });
+  const staff = await model.Staff.findByPk(
+    req.username,{attributes: ['username', 'name', 'date', 'role']}
+  );
 
-  if(!admin) return res.status(404).json({message: "user không tồn tại"});
+  if(!staff) return res.status(404).json({message: "user không tồn tại"});
   return res.status(200).json({
     message: "success",
-    admin: admin
+    staff: staff
   })
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({message: "lỗi server"});
-  }
 }
