@@ -1,6 +1,7 @@
 const express = require('express');
 const Router = express.Router();
 const controllerStaff = require('../controllers/staff');
+const isStaff = require('../middleware/isStaff')
 const multer = require('multer');
 const storge = multer.diskStorage({
   destination: function(req, file, cb){
@@ -13,7 +14,7 @@ const storge = multer.diskStorage({
 const upload = multer({storage: storge});
 
 Router.post('/login', controllerStaff.postLogin);
-Router.get('/infor', controllerStaff.getInfor);
-Router.post('/ticket-entry',upload.single("image"), controllerStaff.postImageIn);
-Router.post('/free-endtry',upload.single("image"), controllerStaff.postImageOut);
+Router.get('/infor', isStaff, controllerStaff.getInfor);
+Router.post('/ticket-entry',isStaff,upload.single("image"), controllerStaff.postImageIn);
+Router.post('/free-endtry', isStaff,upload.single("image"), controllerStaff.postImageOut);
 module.exports = Router

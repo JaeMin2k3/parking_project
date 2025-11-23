@@ -34,7 +34,8 @@ exports.postLogin = async (req, res, next) => {
           }else {
             res.status(200).json({
               message: "success",
-              token: token
+              token: token,
+              role: user.role
             })
           }
          }
@@ -208,26 +209,16 @@ exports.postVerifyEmail = async (req, res, next) => {
 
 // /user/infor
 exports.getInfor = async (req,res,next) =>{
-  try {
-  const token = req.headers.authorization || req.headers.Authorization;
-  let decode;
-  try {
-    decode = jwt.verify(token, process.env.SECRET_KEY);
-  } catch (err) {
-      return res.status(401).json({ message: "Token không hợp lệ hoặc đã hết hạn" });
-  }
-  const username = decode.id;
-  const user = await model.Customer.findByPk(username);
+  const user = await model.Customer.findByPk(
+    req.username,{attributes: ['username', 'gmail', 'role', 'verified', 'status']}
+    
+  );
 
   if(!user) return res.status(404).json({message: "user không tồn tại"});
   return res.status(200).json({
     message: "success",
     user: user
   })
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({message: "lỗi server"});
-  }
 }
 
 exports.postBarCode = async(req,res,next) => {
@@ -310,180 +301,8 @@ exports.postForgetPw = async(req, res, next) => {
     }
   })
   if(!newCustomer) res.status(500).json({message: "lỗi server không thể thay đổi mật khẩu"});
-  res.status(200).json({message: "thay đổi mật khẩu thành công"})
+  return res.status(200).json({message: "thay đổi mật khẩu thành công"})
   }else 
-    res.status(404).json({message: "token đã hết hạn"})
-  
+    return res.status(404).json({message: "token đã hết hạn"})
 }
 
-exports.postReservationWithPayment = async (req, res) => {
-  try {
-    const token = req.headers.authorization || req.headers.Authorization;
-    
-    if (!token) {
-      return res.status(401).json({ message: "Token không được cung cấp" });
-    }
-
-    let decode;
-    try {
-      decode = jwt.verify(token.replace('Bearer ', ''), process.env.SECRET_KEY);
-    } catch (err) {
-      return res.status(401).json({ message: "Token không hợp lệ hoặc đã hết hạn" });
-    }
-
-    const customerUsername = decode.id;
-    const { spotId, plate, vehicle_type, start_time, finish_time, bankCode } = req.body;
-
-    if (!spotId || !plate || !vehicle_type || !start_time || !finish_time) {
-      return res.status(400).json({ message: "Tất cả các trường là bắt buộc" });
-    }
-
-    // Check spot availability
-    const spot = await model.Spot.findByPk(spotId, {
-      include: [{ model: model.ParkingRate }]
-    });
-
-    if (!spot) {
-      return res.status(404).json({ message: "Chỗ đỗ không tồn tại" });
-    }
-
-    if (spot.status !== 'AVAILABLE') {
-      return res.status(400).json({ message: "Chỗ đỗ không khả dụng" });
-    }
-
-    if (spot.vehicle_type !== vehicle_type) {
-      return res.status(400).json({ 
-        message: `Chỗ này chỉ dành cho ${spot.vehicle_type === 'CAR' ? 'ô tô' : 'xe máy'}` 
-      });
-    }
-
-    // Validate time
-    const startDate = new Date(start_time);
-    const endDate = new Date(finish_time);
-    const now = new Date();
-
-    if (startDate < now) {
-      return res.status(400).json({ message: "Thời gian bắt đầu phải sau thời điểm hiện tại" });
-    }
-
-    if (endDate <= startDate) {
-      return res.status(400).json({ message: "Thời gian kết thúc phải sau thời gian bắt đầu" });
-    }
-
-    // Check for overlapping reservations
-    const overlapping = await model.Reservation.findOne({
-      where: {
-        spotId,
-        status: ['PENDING', 'CONFIRMED'],
-        [Op.or]: [
-          {
-            start_time: {
-              [Op.between]: [start_time, finish_time]
-            }
-          },
-          {
-            finish_time: {
-              [Op.between]: [start_time, finish_time]
-            }
-          },
-          {
-            [Op.and]: [
-              { start_time: { [Op.lte]: start_time } },
-              { finish_time: { [Op.gte]: finish_time } }
-            ]
-          }
-        ]
-      }
-    });
-
-    if (overlapping) {
-      return res.status(400).json({ message: "Chỗ đỗ đã được đặt trong khoảng thời gian này" });
-    }
-
-    // Create reservation
-    const reservation = await model.Reservation.create({
-      spotId,
-      customerUsername,
-      plate,
-      vehicle_type,
-      start_time,
-      finish_time,
-      status: 'PENDING'
-    });
-
-    // Update spot status
-    await spot.update({ status: 'RESERVED' });
-
-    // Calculate amount
-    const parkingRate = spot.ParkingRate;
-    if (!parkingRate) {
-      return res.status(400).json({ message: 'Chưa có bảng giá cho chỗ đỗ này' });
-    }
-
-    const durationHours = Math.ceil((endDate - startDate) / (1000 * 60 * 60));
-    let amount = 0;
-
-    if (parkingRate.plan_type === 'HOURLY') {
-      const blockMinutes = parkingRate.block_minutes || 60;
-      const durationMinutes = Math.ceil((endDate - startDate) / (1000 * 60));
-      const numberOfBlocks = Math.ceil(durationMinutes / blockMinutes);
-      amount = numberOfBlocks * parseFloat(parkingRate.unit_price);
-      
-      if (parkingRate.daily_cap && amount > parseFloat(parkingRate.daily_cap)) {
-        amount = parseFloat(parkingRate.daily_cap);
-      }
-    } else if (parkingRate.plan_type === 'DAILY') {
-      const numberOfDays = Math.ceil(durationHours / 24);
-      amount = numberOfDays * parseFloat(parkingRate.unit_price);
-    } else if (parkingRate.plan_type === 'WEEKLY') {
-      const numberOfWeeks = Math.ceil(durationHours / (24 * 7));
-      amount = numberOfWeeks * parseFloat(parkingRate.unit_price);
-    } else if (parkingRate.plan_type === 'MONTHLY') {
-      const numberOfMonths = Math.ceil(durationHours / (24 * 30));
-      amount = numberOfMonths * parseFloat(parkingRate.unit_price);
-    }
-
-    // Create payment record
-    const orderId = `RES${reservation.id}_${Date.now()}`;
-    const payment = await model.Payment.create({
-      reservationId: reservation.id,
-      amount,
-      currency: 'VND',
-      payment_method: 'VNPAY',
-      status: 'PENDING',
-      transaction_id: orderId
-    });
-
-    // Get client IP
-    const ipAddr = req.headers['x-forwarded-for'] || 
-                   req.connection.remoteAddress || 
-                   req.socket.remoteAddress || 
-                   req.connection.socket.remoteAddress;
-
-    // Create VNPay payment URL
-    const paymentUrl = vnpayHelper.createPaymentUrl({
-      orderId: orderId,
-      amount: Math.round(amount),
-      orderDescription: `Thanh toan dat cho ${spot.spot_number} - ${plate}`,
-      orderType: 'billpayment',
-      language: 'vn',
-      bankCode: bankCode || '',
-      ipAddr: ipAddr
-    });
-
-    return res.status(201).json({
-      message: "Đặt chỗ thành công. Vui lòng thanh toán để xác nhận.",
-      reservation: reservation,
-      payment: {
-        id: payment.id,
-        amount: payment.amount,
-        currency: payment.currency,
-        paymentUrl: paymentUrl
-      }
-    });
-
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: "Lỗi server", error: err.message });
-  }
-};
