@@ -312,28 +312,53 @@ exports.postForgetPw = async(req, res, next) => {
 
 exports.postAvailableSlot = async (req, res, next) => {
   const {timeIn, timeOut, date, vehicleType} = req.body;
+  
+  // Validate input
+  if (timeIn === undefined || timeOut === undefined || !date || !vehicleType) {
+    return res.status(400).json({ message: "Thiếu thông tin bắt buộc" });
+  }
+  
   const startBlock = Number(timeIn);
-  const endBlock = Number(timeOut) - 1;
- const freeSpots = await model.Spot.findAll({
-  attributes: ['id', 'area', 'position', 'isActive', 'vehicleType', 'slotType'],
-  where: {
-    isActive: true,
-    vehicleType: vehicleType,
-    slotType: 'ONLINE',
-    '$ReservationBlocks.id$': null // chỉ lấy spot không bận 
-  },
-  include: [
-    {
-      model: model.ReservationBlock,
-      required: false,
-      where: {
-        date,
-        blockIndex: { [Op.between]: [startBlock, endBlock] },
-        status: { [Op.in]: ['CONFIRMED', 'PENDING'] }
+  const endBlock = Number(timeOut);
+  
+  // Validate consecutive hours
+  if (!Number.isInteger(startBlock) || !Number.isInteger(endBlock)) {
+    return res.status(400).json({ message: "Giờ phải là số nguyên (ví dụ: 17, 22)" });
+  }
+  
+  if (startBlock < 0 || startBlock > 23 || endBlock < 1 || endBlock > 24) {
+    return res.status(400).json({ message: "Giờ phải trong khoảng 0-24" });
+  }
+  
+  if (endBlock <= startBlock) {
+    return res.status(400).json({ message: "Giờ kết thúc phải sau giờ bắt đầu" });
+  }
+  
+  const blockCount = endBlock - startBlock;
+  if (blockCount > 24) {
+    return res.status(400).json({ message: "Không thể đặt quá 24 giờ liên tiếp" });
+  }
+  // Query for available spots (endBlock - 1 because if booking 17-22, blocks are 17,18,19,20,21)
+  const freeSpots = await model.Spot.findAll({
+    attributes: ['id', 'area', 'position', 'isActive', 'vehicleType', 'slotType'],
+    where: {
+      isActive: true,
+      vehicleType: vehicleType,
+      slotType: 'ONLINE',
+      '$ReservationBlocks.id$': null // chỉ lấy spot không bận 
+    },
+    include: [
+      {
+        model: model.ReservationBlock,
+        required: false,
+        where: {
+          date,
+          blockIndex: { [Op.between]: [startBlock, endBlock - 1] },
+          status: { [Op.in]: ['CONFIRMED', 'PENDING'] }
+        }
       }
-    }
-  ]
-});
+    ]
+  });
 if(!freeSpots) return res.status(404).json({
   message: "no found",
   freeSpots: [],
@@ -351,14 +376,58 @@ if(!freeSpots) return res.status(404).json({
 // /user/reservation
 exports.postReservation = async (req, res, next) => {
   const {id, position, area, timeIn, timeOut, date, vehicleType, plate } = req.body;
+  
+  // Validate required fields
+  if (!id || !plate || !vehicleType || !date || timeIn === undefined || timeOut === undefined) {
+    return res.status(400).json({ message: "Thiếu thông tin bắt buộc" });
+  }
+  
   const startTime = Number(timeIn);
   const endTime = Number(timeOut);
-  const transaction =await sequelize.transaction();
+  
+  // Validate consecutive hours
+  if (!Number.isInteger(startTime) || !Number.isInteger(endTime)) {
+    return res.status(400).json({ message: "Giờ phải là số nguyên (ví dụ: từ 17h đến 22h)" });
+  }
+  
+  if (startTime < 0 || startTime > 23 || endTime < 1 || endTime > 24) {
+    return res.status(400).json({ message: "Giờ phải trong khoảng 0-24" });
+  }
+  
+  if (endTime <= startTime) {
+    return res.status(400).json({ message: "Giờ kết thúc phải sau giờ bắt đầu" });
+  }
+  
+  const blockCount = endTime - startTime;
+  if (blockCount > 24) {
+    return res.status(400).json({ message: "Không thể đặt quá 24 giờ liên tiếp" });
+  }
+  
+  // Validate date is not in the past
+  const reservationDate = new Date(date);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  if (reservationDate < today) {
+    return res.status(400).json({ message: "Ngày đặt chỗ không thể là quá khứ" });
+  }
+  
+  // If booking for today, check if start time has passed
+  if (reservationDate.getTime() === today.getTime()) {
+    const currentHour = new Date().getHours();
+    if (startTime <= currentHour) {
+      return res.status(400).json({ message: "Không thể đặt giờ đã qua" });
+    }
+  }
+  
+  const transaction = await sequelize.transaction();
   try {
-    const check = await isSlotAvailable(id,date, timeIn, timeOut);
+    const check = await isSlotAvailable(id, date, timeIn, timeOut);
     if(!check){
       await transaction.rollback();
-      return res.staus(409).json({message: "thời gian đặt bị trùng"});
+      return res.status(409).json({ 
+        message: `Chỗ đỗ đã được đặt trong khoảng ${timeIn}:00 - ${timeOut}:00` 
+      });
     }
     console.log(check);
     const reservation = await model.Reservation.create({
@@ -379,7 +448,18 @@ exports.postReservation = async (req, res, next) => {
     }
     await createBlocksFromReservation(reservation, transaction);
     await transaction.commit();
-    return res.status(201).json({ reservation });
+    return res.status(201).json({ 
+      message: `Đặt chỗ thành công từ ${timeIn}:00 đến ${timeOut}:00`,
+      reservation: {
+        id: reservation.id,
+        date: reservation.date,
+        timeRange: `${timeIn}:00 - ${timeOut}:00`,
+        blockCount: reservation.blockCount,
+        plate: reservation.plate,
+        vehicleType: reservation.vehicleType,
+        status: reservation.status
+      }
+    });
   } catch (error) {
     console.log(error)
     await transaction.rollback();
