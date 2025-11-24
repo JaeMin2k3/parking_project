@@ -17,6 +17,6 @@ router.get('/infor', isUser, controllerUser.getInfor);
 router.post('/send-barcode', controllerUser.postBarCode);
 router.post('/forget-password', controllerUser.postForgetPw);
 
-// router.post('/parking-lot/available', controllerUser.postAvailableSlot)
-
+router.post('/parking-lot/available', controllerUser.postAvailableSlot)
+router.post('/reservation', controllerUser.postReservation);
 module.exports = router;

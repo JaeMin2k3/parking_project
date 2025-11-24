@@ -4,15 +4,17 @@ module.exports = (sequelize) => {
   const ReservationBlock = sequelize.define('ReservationBlock', {
   id: { type: DataTypes.BIGINT.UNSIGNED, autoIncrement: true, primaryKey: true },
   date:       { type: DataTypes.DATEONLY, allowNull: false },
-  blockIndex: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, field: 'block_index' }, // 0..23
+  blockIndex: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false }, // 0..23
+  expireTime: {type: DataTypes.DATE, allowNull: false},
+  status: {type: DataTypes.ENUM('CONFIRMED', 'CANCELLED', 'PENDING'), default: 'PENDING'}
 }, {
-  tableName: 'reservation_blocks',
-  underscored: true,
+  tableName: 'reservationBlocks',
+
   indexes: [
     // 1 slot - 1 ngày - 1 giờ chỉ có 1 reservation
-    { unique: true, fields: ['spot_id', 'date', 'block_index'] },
+    { unique: true, fields: ['spotId', 'date', 'blockIndex'] },
     // tránh double insert trong 1 reservation
-    { unique: true, fields: ['reservation_id', 'block_index'] },
+    { unique: true, fields: ['reservationId', 'blockIndex'] },
   ],
 });
   return ReservationBlock;

@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const sequelize = require('../config/database');
 require('dotenv').config();
+const { Op } = require('sequelize');
 // admin/login
 exports.postLogin = async(req, res, next) => {
   const {username, password} = req.body;  

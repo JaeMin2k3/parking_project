@@ -7,7 +7,9 @@ const crypto = require('crypto');
 const { mailer } = require('../config/mailer');
 const sequelize = require('../config/database');
 const vnpayHelper = require('../helper/vnPay');
-
+const ReservationBlock = require('../models/ReservationBlock');
+const isSlotAvailable = require('../helper/isSlotAvailable');
+const createBlocksFromReservation = require('../helper/createBlocksFromReservation');
 // user/login
 exports.postLogin = async (req, res, next) => {
   const {username, password} = req.body;
@@ -245,7 +247,7 @@ exports.postBarCode = async(req,res,next) => {
       useAt: null
     }, {transaction});
     if(!checkUserReset){
-      transaction.rollback();
+      await transaction.rollback();
       res.status(500).json({message: "lỗi server không thể tạo được barcode"})
     }
     await transaction.commit();
@@ -306,3 +308,81 @@ exports.postForgetPw = async(req, res, next) => {
     return res.status(404).json({message: "token đã hết hạn"})
 }
 
+// /user/parking-lot/available
+
+exports.postAvailableSlot = async (req, res, next) => {
+  const {timeIn, timeOut, date, vehicleType} = req.body;
+  const startBlock = Number(timeIn);
+  const endBlock = Number(timeOut) - 1;
+ const freeSpots = await model.Spot.findAll({
+  attributes: ['id', 'area', 'position', 'isActive', 'vehicleType', 'slotType'],
+  where: {
+    isActive: true,
+    vehicleType: vehicleType,
+    slotType: 'ONLINE',
+    '$ReservationBlocks.id$': null // chỉ lấy spot không bận 
+  },
+  include: [
+    {
+      model: model.ReservationBlock,
+      required: false,
+      where: {
+        date,
+        blockIndex: { [Op.between]: [startBlock, endBlock] },
+        status: { [Op.in]: ['CONFIRMED', 'PENDING'] }
+      }
+    }
+  ]
+});
+if(!freeSpots) return res.status(404).json({
+  message: "no found",
+  freeSpots: [],
+})
+  return res.status(200).json({
+    freeSpots: freeSpots,
+    timeIn: timeIn,
+    timeOut: timeOut,
+    date: date,
+    vehicleType: vehicleType
+  })
+  
+}
+
+// /user/reservation
+exports.postReservation = async (req, res, next) => {
+  const {id, position, area, timeIn, timeOut, date, vehicleType, plate } = req.body;
+  const startTime = Number(timeIn);
+  const endTime = Number(timeOut);
+  const transaction =await sequelize.transaction();
+  try {
+    const check = await isSlotAvailable(id,date, timeIn, timeOut);
+    if(!check){
+      await transaction.rollback();
+      return res.staus(409).json({message: "thời gian đặt bị trùng"});
+    }
+    console.log(check);
+    const reservation = await model.Reservation.create({
+      date: date,
+      startBlock: startTime,
+      blockCount: endTime - startTime,
+      status: 'PENDING',
+      channel: 'ONLINE',
+      plate: plate,
+      vehicleType: vehicleType,
+      user_id: req.username,
+      spotId: id
+    },{transaction})
+    console.log(reservation);
+    if(!reservation){
+      await transaction.rollback();
+      return res.status(500).json({message: "lỗi server không thể tạo được reservation"});
+    }
+    await createBlocksFromReservation(reservation, transaction);
+    await transaction.commit();
+    return res.status(201).json({ reservation });
+  } catch (error) {
+    console.log(error)
+    await transaction.rollback();
+    return res.status(500).json({message: 'lỗi server vui long thử lại sau'})
+  }
+}

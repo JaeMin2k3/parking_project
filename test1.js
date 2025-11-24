@@ -6,3 +6,8 @@ const tineEven = hour.split(":")[0];
 console.log(hour);
 console.log(date);
 console.log(tineEven);
+const HOLD_MINUTES = 15;
+const now = new Date().toLocaleString("sv-SE");
+console.log(now);
+const expireTime = new Date(now.getTime() + HOLD_MINUTES * 60 * 1000);
+console.log(expireTime);
