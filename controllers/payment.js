@@ -52,23 +52,20 @@ exports.createReservationPayment = async (req, res) => {
       return res.status(400).json({ message: 'Đặt chỗ đã được thanh toán' });
     }
 
-    // Calculate amount
+    // Calculate amount based on block count (consecutive hours)
     const parkingRate = reservation.Spot.ParkingRate;
     if (!parkingRate) {
       return res.status(400).json({ message: 'Chưa có bảng giá cho chỗ đỗ này' });
     }
 
-    const startTime = new Date(reservation.start_time);
-    const endTime = new Date(reservation.end_time);
-    const durationHours = Math.ceil((endTime - startTime) / (1000 * 60 * 60));
+    const durationHours = reservation.blockCount || 1;
 
     let amount = 0;
     if (parkingRate.plan_type === 'HOURLY') {
-      const blockMinutes = parkingRate.block_minutes || 60;
-      const durationMinutes = Math.ceil((endTime - startTime) / (1000 * 60));
-      const numberOfBlocks = Math.ceil(durationMinutes / blockMinutes);
-      amount = numberOfBlocks * parseFloat(parkingRate.unit_price);
+      // For consecutive hours, simply multiply hours by hourly rate
+      amount = durationHours * parseFloat(parkingRate.unit_price);
       
+      // Apply daily cap if exists
       if (parkingRate.daily_cap && amount > parseFloat(parkingRate.daily_cap)) {
         amount = parseFloat(parkingRate.daily_cap);
       }
@@ -102,19 +99,26 @@ exports.createReservationPayment = async (req, res) => {
                    req.connection.socket.remoteAddress;
 
     // Create VNPay payment URL
+    const startHour = reservation.startBlock;
+    const endHour = reservation.startBlock + reservation.blockCount;
     const paymentUrl = vnpayHelper.createPaymentUrl({
       orderId: orderId,
       amount: Math.round(amount), // Round to integer
-      orderDescription: `Thanh toan dat cho ${reservation.Spot.spot_number} - ${reservation.plate}`,
+      orderDescription: `Dat cho ${reservation.Spot.area}-${reservation.Spot.position} ${startHour}h-${endHour}h - ${reservation.plate}`,
       orderType: 'billpayment',
       language: 'vn',
       bankCode: bankCode || '',
       ipAddr: ipAddr
     });
-
+    
     res.status(200).json({
       message: 'Tạo link thanh toán thành công',
       paymentUrl: paymentUrl,
+      reservation: {
+        date: reservation.date,
+        timeRange: `${startHour}:00 - ${endHour}:00`,
+        hours: reservation.blockCount
+      },
       payment: {
         id: payment.id,
         amount: payment.amount,
