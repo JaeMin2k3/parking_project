@@ -59,7 +59,7 @@ exports.postLogin = async (req,res,next) => {
 // /staff/ticket-entry
 exports.postImageIn = async(req, res, next) => {
   try{
-    const username = req.username;
+    
     let dateTime = new Date().toLocaleString("sv-SE");
     const date = dateTime.split(" ")[0];
     const hour = dateTime.split(" ")[1];
@@ -113,14 +113,36 @@ exports.postImageIn = async(req, res, next) => {
       const booked_end = reservation.startBlock + reservation.blockCount;
       const check = await checkTime(reservation);
       if(!check) return res.status(404).json({message: `thời gian bạn đặt xe từ ${reservation.startBlock}h đến ${(reservation.startBlock+ reservation.blockCount)}h. Vui lòng chờ `})
-      const spotID = reservation.spotId;
-      const spot = await model.Spot.findOne({where: {id: spotID}, transaction});
+      let spotID = reservation.spotId;
+      let area = reservation.area;
+      let position = reservation.position;
+      const spot = await model.Spot.findOne({where: {id: spotID, status: 'active'}, transaction});
+      // kiểm tra spot có hoạt động: xảy ra khi có lỗi với vị trí này admin cập nhập trạng thái của spot gây lỗi
+      let newSpot = null;
+      if(!spot){
+        newSpot = await model.Spot.findOne({where: {
+          vehicleType: vehicleType,
+          slotType: 'OFFLINE',
+          isActive: 1
+        }, transaction})
+        if(!newSpot) {
+          await transaction.rollback();
+          return res.status(404).json({message: "slot của bạn đã đặt đang bảo trì, tôi đã cố gắng tìm slot cho bạn nhưng không tìm được"});
+        }
+        // gắn lại giá trị new spot
+        spotID = newSpot.id;
+        area = newSpot.area;
+        position = newSpot.position;
+      }
       const uploadResult = await uploadTask;
       await model.Reservation.update(
         {status: 'CHECKIN'},
         {where: {id: reservation.id}, transaction}
       )
-      
+      // upadte trạng thái của spot vì spot thuộc loại offline nên phải update
+      if(newSpot){
+        await model.Spot.update({isActive: false}, {where: {id: newSpot.id}, transaction})
+      }
       const ticket = await model.Ticket.create({
         date: date,
         reservationId: reservation.id,
@@ -136,14 +158,16 @@ exports.postImageIn = async(req, res, next) => {
       }, {transaction})
       await transaction.commit(); 
       if(ticket){
-        res.status(200).json({
-        area: spot.area,
-        position: spot.position
+        return res.status(200).json({
+        area: area,
+        position: position
       })
       }
-      // nếu chưa có reservation
+      
     }else{
+      // nếu chưa có reservation
       console.log("ko có reservation")
+      // tìm kiếm spot đang trống
      const spot = await model.Spot.findOne({where: {
         isActive: 1,
         vehicleType: vehicleType,
@@ -151,6 +175,7 @@ exports.postImageIn = async(req, res, next) => {
       }, transaction});
       if(!spot) return res.status(400).json({message: "slot full"})
       // console.log(spot);
+    // tạo reservation tạm
       const reservation = await model.Reservation.create( {
         date: date,
         status: "CHECKIN",
@@ -162,8 +187,11 @@ exports.postImageIn = async(req, res, next) => {
         vehicleType: vehicleType,
       },{transaction})
       // console.log(reservation);
+      // đẩy ảnh lên cloudinary
       const uploadResult = await uploadTask;
+      // cập nhập lại trạng thái của spot
       await model.Spot.update({isActive: false}, {where: {id: spot.id}, transaction})
+      // tạo ticket
       await model.Ticket.create({
         date:date,
         area: spot.area,
@@ -217,85 +245,59 @@ exports.postImageOut = async(req,res,next) => {
       vehicleType = "MOTORBIKE";
     }
     console.log(vehicleType);
-    // join 3 bảng ticket- reservation - payment để tính tiền
-    const mapTicket = await model.Ticket.findOne({
-      include: [
-        {
-          model: model.Reservation,
-          attributes: ['channel', 'vehicleType'],
-          where: {
-            plate: plate,
-            vehicleType: vehicleType,
-            status: 'CHECKIN'
-          }
-        ,
-        include: [
-          {
-            required: false,
-            model: model.Payment,
-            attributes: [
-                'costParking', 'currency'
-            ],
-            where: {
-              status: 'SUCCEEDED',
-            }
-          }
-        ],
-      }],transaction} );
-      console.log(mapTicket);
-    if(!mapTicket) {
-      transaction.rollback();
-      return res.status(404).json({message: "không tìm thấy phương tiện này"});
+    const ticket = await model.Ticket.findOne({where: {
+      plate: plate,
+      vehicleType: vehicleType
+    }, transaction});
+    
+    const payment = await model.Payment.findOne({
+        where: {
+          reservationId: ticket.reservationId,
+          status: 'SUCCEEDED',
+        }
+      }, transaction);
+      const spot = await model.Spot.findOne({where: {
+        id: ticket.spotId,
+      }})
+      console.log(spot)
+    if(!ticket){
+      await transaction.rollback();
+      return res.status(404).json({message: "xe này không tồn tại"})
     }
-      
     // lấy reservation và payment trong mapTicket
-      const reservation = mapTicket.Reservation;
-      const payment = reservation ? reservation.Payment : null;
-      console.log(reservation);
-      console.log(payment);
       let totalPrice = 0;
       const parkingRate = await model.ParkingRate.findOne({where: {vehicleType:vehicleType }, transaction}) ;
       let payedMoney = 0;
+      const start = new Date(ticket.startTime);
+      const end = new Date(dateTime)
+      const diffInMillis = end - start;
+      const hours = diffInMillis / (1000 * 60 * 60);
       if(payment){
           payedMoney = payment.costParking;
           currency = payment.currency;
-      //     if(reservation.channel === 'OFFLINE'){
-      //     const start = mapTicket.startTime;
-      //     const end = new Date(dateTime)
-      //     const diffInMillis = end - start;
-      //     // Đổi ra giờ 
-      //     const hours = diffInMillis / (1000 * 60 * 60);
-      //     totalPrice = hours*parkingRate.unitPrice - payedMoney;
-      //     await model.Spot.update({isActive: true}, {where: {id: mapTicket.spotId}, transaction})
-      //     }else{
+          // trường hop nay xay ra khi ghe dat online bị loi he thong chuyen sang offline cho khach
+          if(spot.slotType === 'OFFLINE'){
+          totalPrice = hours*parkingRate.unitPrice - payedMoney;
+          await model.Spot.update({isActive: true}, {where: {id: ticket.spotId}, transaction})
+          }else{
+            // th nay là chỗ đỗ xe cho online nên không cần update spot
           payedMoney = payment.costParking;
-          const start = mapTicket.startTime;
-          const end = new Date(dateTime)
-          const diffInMillis = end - start;
-          // Đổi ra giờ 
-          const hours = diffInMillis / (1000 * 60 * 60);
           totalPrice = hours*parkingRate.unitPrice - payedMoney;
           if(totalPrice < 0) totalPrice = 0;
-      // }
+      }
       }else{
-          const start = new Date(mapTicket.startTime);
-          const end = new Date(dateTime)
-          const diffInMillis = end - start;
-          // Đổi ra giờ 
-          const hours = diffInMillis / (1000 * 60 * 60);
           totalPrice = hours*parkingRate.unitPrice;
-          await model.Spot.update({isActive: true}, {where: {id: mapTicket.spotId}, transaction});
+          await model.Spot.update({isActive: true}, {where: {id: ticket.spotId}, transaction});
       }
       const uploadResult = await uploadTask;
       const bill = await model.Bill.create({
-        channel: mapTicket.channel,
+        channel: spot.slotType,
         payedMoney: payedMoney,
-        startTime: mapTicket.startTime,
-        finishTime: dateTime,
+        startTime: start,
+        finishTime: end,
         totalPrice: totalPrice,
-        urlCloudinaryCheckIn: mapTicket.urlCloudinaryCheckIn,
+        urlCloudinaryCheckIn: ticket.urlCloudinaryCheckIn,
         urlCloudinaryCheckOut: uploadResult.secure_url,
-        channel: reservation.channel
       }, {transaction});
       if(!bill) {
         transaction.rollback();
@@ -304,9 +306,9 @@ exports.postImageOut = async(req,res,next) => {
 
       await Promise.all([
         await model.Ticket.update({finishTime: dateTime,status: 'inactive',},
-        {where: {id: mapTicket.id}, transaction}),
+        {where: {id: ticket.id}, transaction}),
         await model.Reservation.update({status: 'CHECKOUT'},
-        {where: {id: mapTicket.reservationId}})
+        {where: {id: ticket.reservationId}})
       ])
       await transaction.commit();
       const billResponse = bill.toJSON();

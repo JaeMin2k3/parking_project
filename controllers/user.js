@@ -263,7 +263,7 @@ exports.postBarCode = async(req,res,next) => {
       subject: 'Reset Password',
       html: `
         <p>Xin chào bạn, rất vui khi bạn đã tin tưởng và sử dụng website của chúng tôi</P>
-        <p>Barcode để reset password của bạn là: ${rawToken};
+        <p>Barcode để reset password của bạn là: ${rawToken}
         `
     });
     res.status(200).json({message: "success"})
