@@ -19,4 +19,6 @@ router.post('/forget-password', controllerUser.postForgetPw);
 
 router.post('/parking-lot/available', controllerUser.postAvailableSlot)
 router.post('/reservation', controllerUser.postReservation);
+router.post('/payment/vnpay/create', controllerUser.postCreateVnpayPayment);
+router.get('/payment/vnpay/return', controllerUser.vnpayIpn)
 module.exports = router;

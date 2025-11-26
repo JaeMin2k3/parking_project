@@ -1,10 +1,13 @@
-
 require('dotenv').config();
+const { VNPay, ignoreLogger } = require('vnpay');
 
-module.exports = {
-  vnp_TmnCode: process.env.VNP_TMN_CODE,
-  vnp_HashSecret: process.env.VNP_HASH_SECRET,
-  vnp_Url: process.env.VNP_URL,
-  vnp_ReturnUrl: process.env.VNP_RETURN_URL,
-  vnp_IpnUrl: process.env.VNP_IPN_URL
-};
+const vnpay = new VNPay({
+  tmnCode:process.env.VNP_TMNCODE.trim(),
+  secureSecret:process.env.VNP_HASHSECRET.trim(),
+  vnpayHost: 'https://sandbox.vnpayment.vn', // sau này build production thì đổi
+  testMode: true,
+  hashAlgorithm: 'SHA512',
+  loggerFn: ignoreLogger,
+});
+
+module.exports = vnpay;

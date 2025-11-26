@@ -6,10 +6,16 @@ require('dotenv').config();
 const crypto = require('crypto');
 const { mailer } = require('../config/mailer');
 const sequelize = require('../config/database');
-const vnpayHelper = require('../helper/vnPay');
+
 const ReservationBlock = require('../models/ReservationBlock');
 const isSlotAvailable = require('../helper/isSlotAvailable');
 const createBlocksFromReservation = require('../helper/createBlocksFromReservation');
+
+
+const vnpay = require('../config/vnpay');
+const { VnpLocale, dateFormat, ProductCode } = require('vnpay'); // helper từ lib
+
+
 // user/login
 exports.postLogin = async (req, res, next) => {
   const {username, password} = req.body;
@@ -466,3 +472,183 @@ exports.postReservation = async (req, res, next) => {
     return res.status(500).json({message: 'lỗi server vui long thử lại sau'})
   }
 }
+
+// user/payment/vnpay/create
+exports.postCreateVnpayPayment = async (req, res, next) => {
+  const { reservationId } = req.body;
+  if (!reservationId) {
+    return res.status(400).json({ message: 'chưa gửi reservationId' });
+  }
+
+  const t = await sequelize.transaction();
+  try {
+    // 1. Lấy reservation đang PENDING
+    const reservation = await model.Reservation.findOne({
+      where: { id: reservationId, status: 'PENDING' },
+      transaction: t,
+      lock: t.LOCK.UPDATE, 
+    });
+
+    if (!reservation) {
+      await t.rollback();
+      return res
+        .status(404)
+        .json({ message: 'reservation không tồn tại hoặc không ở trạng thái PENDING' });
+    }
+
+    //Tính tiền dựa trên ParkingRate
+    const blockCount = reservation.blockCount;
+
+    const rate = await model.ParkingRate.findOne({
+      where: { vehicleType: reservation.vehicleType },
+      transaction: t,
+    });
+
+    if (!rate) {
+      await t.rollback();
+      return res.status(500).json({ message: 'Không tìm thấy bảng giá cho loại xe này' });
+    }
+
+    const unitPrice = Number(rate.unitPrice);
+    if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+      await t.rollback();
+      return res.status(500).json({ message: 'Đơn giá không hợp lệ' });
+    }
+
+    const amount = blockCount * unitPrice; // số tiền VND (ví dụ 30000)
+
+    // Tạo mã vnp_TxnRef riêng cho mỗi payment
+    const vnp_TxnRef = `RES${reservation.id}${Date.now()}`;
+
+    // 4. Tạo bản ghi payment
+    const payment = await model.Payment.create(
+      {
+        reservationId,
+        costParking: amount,
+        currency: 'VND',
+        status: 'PENDING',
+        vnpTxnRef: vnp_TxnRef,
+      },
+      { transaction: t }
+    );
+
+    await t.commit();
+
+    const now = new Date();
+    const vnp_Amount = amount;
+    const paymentUrl = vnpay.buildPaymentUrl({
+      vnp_Amount: vnp_Amount, 
+      vnp_IpAddr: '127.0.0.1',
+      vnp_TxnRef: vnp_TxnRef,
+      vnp_OrderInfo: `${reservation.id}`,
+      vnp_OrderType: ProductCode.Other,
+      vnp_ReturnUrl: process.env.VNP_RETURNURL,
+      vnp_Locale: VnpLocale.VN,
+      vnp_CreateDate: dateFormat(new Date()),
+      vnp_ExpireDate: dateFormat(new Date(now.getTime() + 15 * 60 * 1000))
+    });
+
+    console.log('paymentUrl:', paymentUrl);
+    
+
+    return res.status(200).json({
+      reservationId: reservation.id,
+      paymentId: payment.id,
+      amount,
+      vnpayUrl: paymentUrl,
+    });
+  } catch (error) {
+    console.error(error);
+    await t.rollback();
+    return res.status(500).json({ message: 'Lỗi server khi tạo thanh toán VNPAY' });
+  }
+};
+
+
+
+
+exports.vnpayIpn = async (req, res) => {
+  // VNPAY gọi vào đây với method GET và các tham số trên URL (req.query)
+  try {
+    // Xác thực chữ ký (Checksum) - Bảo mật
+    const verify = vnpay.verifyIpnCall(req.query);
+    console.log(req.query);
+    if (!verify.isSuccess) {
+      return res.status(200).json({ RspCode: '97', Message: 'Checksum failed' });
+    }
+
+    // Lấy dữ liệu từ VNPAY
+    const vnp_TxnRef = req.query.vnp_TxnRef;       // Mã tham chiếu (khớp với create)
+    const vnp_Amount = req.query.vnp_Amount;       // Số tiền * 100
+    const vnp_ResponseCode = req.query.vnp_ResponseCode; 
+    console.log(vnp_ResponseCode);
+    const payment = await model.Payment.findOne({
+      where: { vnpTxnRef: vnp_TxnRef },
+    });
+
+    if (!payment) {
+      return res.status(200).json({ RspCode: '01', Message: 'Order not found' });
+    }
+
+    // Kiểm tra số tiền 
+    if (Number(payment.costParking) !== Number(vnp_Amount/100)) {
+      return res.status(200).json({ RspCode: '04', Message: 'Invalid amount' });
+    }
+
+    // 6. Kiểm tra xem đơn này đã xử lý chưa (Chống trùng lặp)
+    if (payment.status === 'SUCCEEDED' || payment.status === 'FAILED') {
+      return res.status(200).json({ RspCode: '02', Message: 'Order already confirmed' });
+    }
+
+    const t = await sequelize.transaction();
+
+    try {
+      if (vnp_ResponseCode === '00') {
+       Promise.all([
+        await model.Payment.update({status: 'SUCCEEDED'},{where: {reservationId: payment.reservationId}, t}),
+        await model.Reservation.update({status: 'CONFIRMED'},{where: {id: payment.reservationId}, t}),
+        await model.ReservationBlock.update(
+          { status: 'CONFIRMED' },
+          {
+            where: {
+              reservationId: payment.reservationId,
+              status: 'PENDING'
+            },
+            transaction: t
+          }
+        )
+       ])
+
+        await t.commit(); 
+        return res.status(200).json({ RspCode: '00', Message: 'Success' });
+
+      } else {
+        Promise.all([
+        await model.Payment.update({status: 'FAILED'},{where: {reservationId: payment.reservationId}, t}),
+        await model.Reservation.update({status: 'CANCELLED'},{where: {id: payment.reservationId}, t}),
+        await model.ReservationBlock.update(
+          { status: 'CANCELLED' },
+          {
+            where: {
+              reservationId: { [Op.in]: payment.reservationId },
+              status: 'PENDING'
+            },
+            transaction: t
+          }
+        )
+       ])
+
+        await t.commit();
+        return res.status(200).json({ RspCode: '00', Message: 'Success' });
+      }
+    } catch (dbError) {
+      await t.rollback();
+      console.error('Database Transaction Error:', dbError);
+      return res.status(200).json({ RspCode: '99', Message: 'Unknow error' });
+    }
+
+  } catch (error) {
+    console.error('VNPAY IPN Error:', error);
+    return res.status(200).json({ RspCode: '99', Message: 'Unknow error' });
+  }
+};
