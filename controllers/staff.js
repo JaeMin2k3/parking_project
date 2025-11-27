@@ -1,21 +1,11 @@
 const model = require('../models/index');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const Reservation = require('../models/Reservation');
-const Spot = require('../models/Spot')
-const Staff = require('../models/Staff')
-const Ticket = require('../models/Ticket')
 require('dotenv').config();
 const platerecognizer = require('../helper/plateRecognizer');
-const cloudinary = require('../config/cloudinary')
 const checkTime = require('../helper/checkTime')
-const fs = require('fs')
 const sequelize = require('../config/database');
-const converTime = require('../helper/converTime');
 const uploadAndCleanup = require('../helper/uploadAndCleanup');
-const { channel } = require('diagnostics_channel');
-
-
 
 // staff/login
 exports.postLogin = async (req,res,next) => {
@@ -224,11 +214,9 @@ exports.postImageOut = async(req,res,next) => {
   const transaction = await sequelize.transaction();
   try {
     let dateTime = new Date().toLocaleString("sv-SE");
-    const date = dateTime.split(" ")[0];
-    const hour = dateTime.split(" ")[1];
-    const tineEven = hour.split(":")[0];
     
     const filePath = req.file.path;
+    // khởi tạo trước gọi api bên thứ 3 và đẩy ảnh lên cloud
     const plateTask = platerecognizer(filePath);
     const uploadTask = uploadAndCleanup(filePath);
     // lấy dữ liệu
@@ -236,42 +224,58 @@ exports.postImageOut = async(req,res,next) => {
     const type = data.results[0].vehicle.type;
     const plate = data.results[0].plate?.toUpperCase();
     console.log(type + " "+ plate)
+
+    // check xem bên thứ 3 có scan được biển số và loại xe không
     if(!type || !plate) {
       transaction.rollback();
       return res.status(400).json({message: "không thể xác định được loại xe hoặc biển số vui lòng chụp lại"});
     }
+
+    // bên thứ 3 trả về xe máy là motorbike, oto tra nhiều loại suv,.. -> phải xử lí
     let vehicleType = 'CAR';
     if(type === "Motorcycle"){
       vehicleType = "MOTORBIKE";
     }
     console.log(vehicleType);
+
+    // tìm ticket của xe
     const ticket = await model.Ticket.findOne({where: {
       plate: plate,
       vehicleType: vehicleType
     }, transaction});
     
+    // tìm kiếm payment khi đặt online, không check payment vì không phải xe nào cũng đặt trước
     const payment = await model.Payment.findOne({
         where: {
           reservationId: ticket.reservationId,
           status: 'SUCCEEDED',
         }
       }, transaction);
+
+    // spot của xe
       const spot = await model.Spot.findOne({where: {
         id: ticket.spotId,
       }})
       console.log(spot)
+
+    // kiểm tra ticket của xe có tồn tại không
     if(!ticket){
       await transaction.rollback();
       return res.status(404).json({message: "xe này không tồn tại"})
     }
-    // lấy reservation và payment trong mapTicket
+
       let totalPrice = 0;
+      // lấy giá của 1h của loại phương tiện trong paring rate
       const parkingRate = await model.ParkingRate.findOne({where: {vehicleType:vehicleType }, transaction}) ;
       let payedMoney = 0;
+
+      // tính tiền
       const start = new Date(ticket.startTime);
       const end = new Date(dateTime)
       const diffInMillis = end - start;
-      const hours = diffInMillis / (1000 * 60 * 60);
+
+      // chuyển về giờ
+      const hours = diffInMillis / (1000 * 60 * 60); 
       if(payment){
           payedMoney = payment.costParking;
           currency = payment.currency;
@@ -286,10 +290,14 @@ exports.postImageOut = async(req,res,next) => {
           if(totalPrice < 0) totalPrice = 0;
       }
       }else{
+        // th này là xe đến trực tiếp
           totalPrice = hours*parkingRate.unitPrice;
           await model.Spot.update({isActive: true}, {where: {id: ticket.spotId}, transaction});
       }
+      // đẩy ảnh lên cloud, để nhận về đường dẫn của ảnh
       const uploadResult = await uploadTask;
+
+      // tạo hoá đơn
       const bill = await model.Bill.create({
         channel: spot.slotType,
         payedMoney: payedMoney,
@@ -299,18 +307,24 @@ exports.postImageOut = async(req,res,next) => {
         urlCloudinaryCheckIn: ticket.urlCloudinaryCheckIn,
         urlCloudinaryCheckOut: uploadResult.secure_url,
       }, {transaction});
+
+      // check bill
       if(!bill) {
         transaction.rollback();
         return res.status(500).json({message: "lỗi server không thể tạo bill"})      
       }
 
+      // chạy song song 2 sql update -> rút gắn thời gian
       await Promise.all([
         await model.Ticket.update({finishTime: dateTime,status: 'inactive',},
         {where: {id: ticket.id}, transaction}),
         await model.Reservation.update({status: 'CHECKOUT'},
-        {where: {id: ticket.reservationId}})
+        {where: {id: ticket.reservationId}, transaction})
       ])
+
       await transaction.commit();
+
+      // phải chuyển về gmt+7 vì khi res.status(200).json nó tự động trả về gmt 0
       const billResponse = bill.toJSON();
       billResponse.startTime = new Date(bill.startTime).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
       billResponse.finishTime = new Date(bill.finishTime).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });

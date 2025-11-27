@@ -4,7 +4,7 @@ module.exports = (sequelize) => {
   const ReservationBlock = sequelize.define('ReservationBlock', {
   id: { type: DataTypes.BIGINT.UNSIGNED, autoIncrement: true, primaryKey: true },
   date:       { type: DataTypes.DATEONLY, allowNull: false },
-  blockIndex: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false }, // 0..23
+  blockIndex: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false }, 
   expireTime: {type: DataTypes.DATE, allowNull: false},
   status: {type: DataTypes.ENUM('CONFIRMED', 'CANCELLED', 'PENDING'), default: 'PENDING'}
 }, {

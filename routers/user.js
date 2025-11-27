@@ -8,7 +8,7 @@ const isUser = require('../middleware/isUser')
 router.post('/login', validateUserNamePhone, controllerUser.postLogin)
 router.post('/signup', validateUserNamePhone, controllerUser.postSign)
 
-router.post('/resend-verify', isUser, controllerUser.postResendVerify);
+router.post('/resend-verify', controllerUser.postResendVerify);
 router.get('/verify-email/:token', controllerUser.verifyEmailBridge);
 router.post('/verify-email', controllerUser.postVerifyEmail);
 

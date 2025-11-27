@@ -1,14 +1,13 @@
-// models/index.js hoặc chỗ bạn export model
-const { Reservation, ReservationBlock } = require('../models');
 
-const HOLD_MINUTES = 15; // thời gian giữ chỗ nếu chưa pay
+const model = require('../models/index')
 
-module.exports = async function createBlocksFromReservation(reservation, transaction) {
+const HOLD_MINUTES = 15; // thời gian để check giữ chỗ khi thanh toán
+
+module.exports = async function createBlocksFromReservation(reservation, dateTimeIn, dateTimeOut, transaction) {
   const {
     id: reservationId,
     spotId,
-    date,
-    startBlock,
+    startBlock, 
     blockCount,
     status
   } = reservation;
@@ -17,21 +16,28 @@ module.exports = async function createBlocksFromReservation(reservation, transac
   const now = new Date();
   const expireTime = new Date(now.getTime() + HOLD_MINUTES * 60 * 1000);
 
-  // tạo list blockIndex: startBlock .. startBlock + blockCount - 1
-  const endBlock = startBlock + blockCount; // [startBlock, endBlock)
-  for (let blockIndex = startBlock; blockIndex < endBlock; blockIndex++) {
+  // Vòng lặp chạy đủ số lượng block cần tạo
+  for (let i = 0; i < blockCount; i++) {
+    let currentRawHour = startBlock + i; 
+    let targetDate = dateTimeIn;
+    let targetBlockIndex = currentRawHour;
+
+    // nếu giờ hiện tại chạm 24 sang ngày mới - xử lí
+    if (currentRawHour > 23) {
+      targetDate = dateTimeOut;    // dán ngày hôm sau  
+      targetBlockIndex = currentRawHour - 24; 
+    }
+
     blocks.push({
       reservationId,
       spotId,
-      date,
-      blockIndex,
+      date: targetDate,        
+      blockIndex: targetBlockIndex, 
       expireTime,
       status: status || 'PENDING',
     });
   }
 
-  // tạo nhiều dòng 1 lần
-  await ReservationBlock.bulkCreate(blocks, { transaction });
-}
-
-
+ // insert nhiều hàm cùng 1 lúc
+  await model.ReservationBlock.bulkCreate(blocks, { transaction });
+};
