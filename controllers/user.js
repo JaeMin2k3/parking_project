@@ -14,7 +14,8 @@ const createBlocksFromReservation = require('../helper/createBlocksFromReservati
 
 const vnpay = require('../config/vnpay');
 const { VnpLocale, dateFormat, ProductCode } = require('vnpay'); // helper từ lib
-
+const createAndSendVerifyLink = require('../helper/createAndSendVerifyLink');
+const { transcode } = require('buffer');
 
 // user/login
 exports.postLogin = async (req, res, next) => {
@@ -63,22 +64,26 @@ exports.postLogin = async (req, res, next) => {
 
 // user/signup
 exports.postSign = async (req, res) => {
+  const transaction = await sequelize.transaction();
   try {
     const { username, password, gmail } = req.body;
     if (!username || !password || !gmail) {
+      await transaction.rollback();
       return res.status(400).json({ message: 'Thiếu username/password/gmail' });
     }
     const email = String(gmail).trim().toLowerCase();
 
+    // check tài khoản
     const existed = await model.Customer.findOne({
       where: { [Op.or]: [{ username: username.trim() }, { gmail: email }] },
       attributes: ['username','gmail'],
       raw: true
     });
-    if (existed) return res.status(409).json({ message: 'Username hoặc gmail đã tồn tại' });
-
+    if (existed){
+      await transaction.rollback();
+     return res.status(409).json({ message: 'Username hoặc gmail đã tồn tại' });
+    }
     let verifyLink;
-    await model.Customer.sequelize.transaction(async (t) => {
       const password_hash = await bcrypt.hash(password, 10);
       const user = await model.Customer.create({
         username: username,
@@ -87,20 +92,21 @@ exports.postSign = async (req, res) => {
         role: 'customer',
         status: 1,
         verified: false
-      }, { transaction: t });
+      }, { transaction });
 
-      await model.UserVerify.destroy({ where: { gmailCustomer: email, usedAt: null }, transaction: t });
+      
+      await model.UserVerify.destroy({ where: { gmailCustomer: email, usedAt: null }, transaction });
 
-      const rawToken  = crypto.randomBytes(32).toString('hex');
+      const rawToken  = crypto.randomBytes(4).toString('hex');
       const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
       const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
 
-      await model.UserVerify.create({ gmailCustomer: email, tokenHash, expiresAt }, { transaction: t });
+      await model.UserVerify.create({ gmailCustomer: email, tokenHash, expiresAt }, { transaction});
 
     
       verifyLink = `${process.env.APP_BASE_URL}/verify-email/${encodeURIComponent(rawToken)}`;
-      
-      t.afterCommit(async () => {
+      transaction.commit();
+      transaction.afterCommit(async () => {
         await mailer.sendMail({
           to: email,
           from: process.env.MAIL_FROM || process.env.GMAIL_USER,
@@ -112,54 +118,43 @@ exports.postSign = async (req, res) => {
           `
         });
       });
-    });
     return res.status(200).json({ message: 'Tạo tài khoản thành công. Kiểm tra email để xác minh.' });
   } catch (err) {
     console.error(err);
+    await transaction.rollback();
     return res.status(500).json({ message: 'Lỗi hệ thống' });
   }
 };
 
 
-async function createAndSendVerifyLink(user, t) {
-  // Xoá token cũ chưa dùng 
-  await model.UserVerify.destroy({ where: { gmail_customer: user.gmail, usedAt: null }, transaction: t });
-  console.log(user)
-  const rawToken = crypto.randomBytes(32).toString('hex');
-  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 30); 
-
-  await model.UserVerify.create({ gmailCustomer: user.gmail, tokenHash, expiresAt }, { transaction: t });
-
-  const link = `${process.env.APP_BASE_URL}/verify-email/${encodeURIComponent(rawToken)}`;
-
-  await mailer.sendMail({
-    to: user.gmail,
-    subject: 'Xác minh email',
-    html: `
-      <p>Chào bạn,</p>
-      <p>Nhấn để xác minh email:</p>
-      <p><a href="${link}">${link}</a></p>
-      <p>Nếu không phải bạn, hãy bỏ qua email này.</p>
-    `,
-  });
-}
-
-
+// /user/resend-verify
 exports.postResendVerify = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
   try {
     const { gmail } = req.body || {};
     console.log(gmail)
-    if (!gmail) return res.status(400).json({ error: 'email is required' });
-
+    if (!gmail) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'vui lòng nhập gmail' });
+    }
     const user = await model.Customer.findOne({ where: { gmail: String(gmail).toLowerCase() } });
     console.log(user)
-    if (!user) return res.status(404).json({ error: 'User không tồn tại' });
-    if (user.verified) return res.status(400).json({ error: 'User đã xác minh' });
-
-    await model.Customer.sequelize.transaction(async (t) => { await createAndSendVerifyLink(user, t); });
+    if (!user){
+      await transaction.rollback();
+      return res.status(404).json({ error: 'User không tồn tại' });
+    }
+    if (user.verified){
+      await transaction.rollback();
+      return res.status(400).json({ error: 'User đã xác minh' });
+    }
+    await createAndSendVerifyLink(user, transaction);
+    await transaction.commit()
     return res.json({ ok: true, message: 'Đã gửi lại email xác minh' });
-  } catch (err) { next(err); }
+  } catch (err) {
+    console.log(err);
+    await transaction.rollback(); 
+    next(err); 
+  }
 };
 
 
@@ -185,33 +180,38 @@ exports.verifyEmailBridge = (req, res) => {
 
 // /user/verify-email
 exports.postVerifyEmail = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
   try {
     const raw = String(req.body.token || '');
-    if (!raw) return res.status(400).send('Thiếu token');
-
+    if (!raw) {
+      await transaction.rollback();
+      return res.status(400).send('Thiếu token');
+    }
     const hash = crypto.createHash('sha256').update(raw).digest('hex');
     const rec = await model.UserVerify.findOne({ where: { tokenHash: hash } });
     if (!rec) return res.status(400).send('Token không hợp lệ');
     if (rec.usedAt) return res.status(400).send('Token đã được sử dụng');
     if (rec.expiresAt.getTime() < Date.now()) return res.status(400).send('Token đã hết hạn');
-
-    await model.Customer.sequelize.transaction(async (t) => {
+    Promise.all([ 
       await model.Customer.update(
         { verified: true },
-        { where: { gmail: rec.gmailCustomer }, transaction: t }
-      );
+        { where: { gmail: rec.gmailCustomer }, transaction: transaction }
+      ),
       await model.UserVerify.update(
         { usedAt: new Date() },
-        { where: { id: rec.id }, transaction: t }
-      );
+        { where: { id: rec.id }, transaction: transaction }
+      ),
       await model.UserVerify.destroy({
         where: { gmailCustomer: rec.gmailCustomer, usedAt: null },
-        transaction: t
-      });
-    });
+        transaction: transaction
+      })
+    ])  
+    transaction.commit();
     return res.send('Xác minh email thành công!');
-  } catch (e) {
-    return next(e);
+  } catch (error) {
+    console.log(error);
+    await transaction.rollback();
+    return next(error);
   }
 };
 
@@ -317,34 +317,73 @@ exports.postForgetPw = async(req, res, next) => {
 // /user/parking-lot/available
 
 exports.postAvailableSlot = async (req, res, next) => {
-  const {timeIn, timeOut, date, vehicleType} = req.body;
+  const {timeIn, timeOut, dateTimeIn, dateTimeOut, vehicleType} = req.body;
   
   // Validate input
-  if (timeIn === undefined || timeOut === undefined || !date || !vehicleType) {
-    return res.status(400).json({ message: "Thiếu thông tin bắt buộc" });
+  if (timeIn === undefined || timeOut === undefined || !dateTimeIn || !dateTimeOut || !vehicleType) {
+    return res.status(400).json({ message: "vui lòng gửi đủ trường dữ liệu" });
   }
   
   const startBlock = Number(timeIn);
   const endBlock = Number(timeOut);
   
-  // Validate consecutive hours
   if (!Number.isInteger(startBlock) || !Number.isInteger(endBlock)) {
-    return res.status(400).json({ message: "Giờ phải là số nguyên (ví dụ: 17, 22)" });
+    return res.status(400).json({ message: "Giờ phải là số nguyên" });
   }
   
-  if (startBlock < 0 || startBlock > 23 || endBlock < 1 || endBlock > 24) {
-    return res.status(400).json({ message: "Giờ phải trong khoảng 0-24" });
+  if (startBlock < 0 || startBlock > 23 || endBlock > 23 || endBlock < 0) {
+    return res.status(400).json({ message: "giờ phải nằm trong khoảng từ 0 đến 23" });
   }
   
-  if (endBlock <= startBlock) {
-    return res.status(400).json({ message: "Giờ kết thúc phải sau giờ bắt đầu" });
+  const entryDate = new Date(dateTimeIn);
+  const exitDate = new Date(dateTimeOut);
+
+  entryDate.setHours(timeIn, 0, 0 ,0);
+  exitDate.setHours(timeOut, 0, 0, 0);
+
+  const now = new Date();
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+  const ONE_Hour = 60 * 60 * 1000;
+
+  if(entryDate - now < ONE_Hour*2) {
+    return res.status(400).json({message: "thời gian đặt chỗ với thời gian đăt phải cách nhau tối thiểu 2h"});
   }
-  
-  const blockCount = endBlock - startBlock;
-  if (blockCount > 24) {
-    return res.status(400).json({ message: "Không thể đặt quá 24 giờ liên tiếp" });
+
+  const diffMs = exitDate - entryDate;
+   if(diffMs > ONE_DAY || diffMs < ONE_Hour){
+    return res.status(400).json({message: "bạn không thể đặt chỗ quá 24h và phải chỗ ít nhất 1h"})
   }
-  // Query for available spots (endBlock - 1 because if booking 17-22, blocks are 17,18,19,20,21)
+
+  let isOverNight= false;
+  if (new Date(dateTimeIn).getDate() !== new Date(dateTimeOut).getDate()) {
+      isOvernight = true;
+  }
+  const blockWhereCondition = {
+      status: { [Op.in]: ['CONFIRMED', 'PENDING'] }
+  };
+  if (!isOvernight) {
+      // TRƯỜNG HỢP 1: Trong ngày
+      blockWhereCondition.date = dateTimeIn;
+      blockWhereCondition.blockIndex = { [Op.between]: [startBlock, endBlock - 1] };
+  } else {
+      // TRƯỜNG HỢP 2: Qua đêm 
+      const orConditions = [
+          {
+              date: dateTimeIn,
+              blockIndex: { [Op.between]: [startBlock, 23] } 
+          }
+      ];
+      
+      // Chỉ check ngày hôm sau nếu giờ ra > 0
+      if (endBlock > 0) {
+          orConditions.push({
+              date: dateTimeOut,
+              blockIndex: { [Op.between]: [0, endBlock - 1] } // Từ 0h đến giờ ra
+          });
+      }
+      
+      blockWhereCondition[Op.or] = orConditions;
+  }
   const freeSpots = await model.Spot.findAll({
     attributes: ['id', 'area', 'position', 'isActive', 'vehicleType', 'slotType'],
     where: {
@@ -357,11 +396,7 @@ exports.postAvailableSlot = async (req, res, next) => {
       {
         model: model.ReservationBlock,
         required: false,
-        where: {
-          date,
-          blockIndex: { [Op.between]: [startBlock, endBlock - 1] },
-          status: { [Op.in]: ['CONFIRMED', 'PENDING'] }
-        }
+        where: blockWhereCondition
       }
     ]
   });
@@ -373,7 +408,8 @@ if(!freeSpots) return res.status(404).json({
     freeSpots: freeSpots,
     timeIn: timeIn,
     timeOut: timeOut,
-    date: date,
+    dateTimeIn: dateTimeIn,
+    dateTimeOut: dateTimeOut,
     vehicleType: vehicleType
   })
   
@@ -381,54 +417,56 @@ if(!freeSpots) return res.status(404).json({
 
 // /user/reservation
 exports.postReservation = async (req, res, next) => {
-  const {id, position, area, timeIn, timeOut, date, vehicleType, plate } = req.body;
-  
-  // Validate required fields
-  if (!id || !plate || !vehicleType || !date || timeIn === undefined || timeOut === undefined) {
-    return res.status(400).json({ message: "Thiếu thông tin bắt buộc" });
+  const {id, timeIn, timeOut, dateTimeIn, dateTimeOut, vehicleType, plate } = req.body;
+  const date = new Date();
+  // Validate input
+  if (timeIn === undefined || timeOut === undefined || !dateTimeIn || !dateTimeOut || !vehicleType) {
+    return res.status(400).json({ message: "vui lòng gửi đủ trường dữ liệu" });
   }
   
-  const startTime = Number(timeIn);
-  const endTime = Number(timeOut);
+  const startBlock = Number(timeIn);
+  const endBlock = Number(timeOut);
   
-  // Validate consecutive hours
-  if (!Number.isInteger(startTime) || !Number.isInteger(endTime)) {
-    return res.status(400).json({ message: "Giờ phải là số nguyên (ví dụ: từ 17h đến 22h)" });
+  if (!Number.isInteger(startBlock) || !Number.isInteger(endBlock)) {
+    return res.status(400).json({ message: "Giờ phải là số nguyên" });
   }
   
-  if (startTime < 0 || startTime > 23 || endTime < 1 || endTime > 24) {
-    return res.status(400).json({ message: "Giờ phải trong khoảng 0-24" });
+  if (startBlock < 0 || startBlock > 23 || endBlock > 23 || endBlock < 0) {
+    return res.status(400).json({ message: "giờ phải nằm trong khoảng từ 0 đến 23" });
   }
   
-  if (endTime <= startTime) {
-    return res.status(400).json({ message: "Giờ kết thúc phải sau giờ bắt đầu" });
+  const entryDate = new Date(dateTimeIn);
+  const exitDate = new Date(dateTimeOut);
+
+  entryDate.setHours(timeIn, 0, 0 ,0);
+  exitDate.setHours(timeOut, 0, 0, 0);
+
+  const now = new Date();
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+  const ONE_Hour = 60 * 60 * 1000;
+
+  if(entryDate - now < ONE_Hour*2) {
+    return res.status(400).json({message: "thời gian đặt chỗ với thời gian đăt phải cách nhau tối thiểu 2h"});
+  }
+
+  const diffMs = exitDate - entryDate;
+   if(diffMs > ONE_DAY || diffMs < ONE_Hour){
+    return res.status(400).json({message: "bạn không thể đặt chỗ quá 24h và phải chỗ ít nhất 1h"})
   }
   
-  const blockCount = endTime - startTime;
-  if (blockCount > 24) {
-    return res.status(400).json({ message: "Không thể đặt quá 24 giờ liên tiếp" });
+  let isOverNight = false;
+  if (new Date(dateTimeIn).getDate() !== new Date(dateTimeOut).getDate()) {
+      isOverNight = true;
   }
-  
-  // Validate date is not in the past
-  const reservationDate = new Date(date);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  if (reservationDate < today) {
-    return res.status(400).json({ message: "Ngày đặt chỗ không thể là quá khứ" });
+  let blockCount = 0;
+  if(isOverNight){
+    blockCount = 24 - startBlock + endBlock;
+  }else{
+    blockCount = endBlock - startBlock;
   }
-  
-  // If booking for today, check if start time has passed
-  if (reservationDate.getTime() === today.getTime()) {
-    const currentHour = new Date().getHours();
-    if (startTime <= currentHour) {
-      return res.status(400).json({ message: "Không thể đặt giờ đã qua" });
-    }
-  }
-  
   const transaction = await sequelize.transaction();
   try {
-    const check = await isSlotAvailable(id, date, timeIn, timeOut);
+    const check = await isSlotAvailable(id, dateTimeIn, timeIn, blockCount);
     if(!check){
       await transaction.rollback();
       return res.status(409).json({ 
@@ -438,8 +476,8 @@ exports.postReservation = async (req, res, next) => {
     console.log(check);
     const reservation = await model.Reservation.create({
       date: date,
-      startBlock: startTime,
-      blockCount: endTime - startTime,
+      startBlock: startBlock,
+      blockCount: blockCount,
       status: 'PENDING',
       channel: 'ONLINE',
       plate: plate,
@@ -452,10 +490,10 @@ exports.postReservation = async (req, res, next) => {
       await transaction.rollback();
       return res.status(500).json({message: "lỗi server không thể tạo được reservation"});
     }
-    await createBlocksFromReservation(reservation, transaction);
+    await createBlocksFromReservation(reservation, dateTimeIn, dateTimeOut, transaction);
     await transaction.commit();
     return res.status(201).json({ 
-      message: `Đặt chỗ thành công từ ${timeIn}:00 đến ${timeOut}:00`,
+      message: `Đặt chỗ thành công từ ${timeIn}:00 - ngày ${dateTimeIn} đến ${timeOut}:00 - ngày ${dateTimeOut}`,
       reservation: {
         id: reservation.id,
         date: reservation.date,
