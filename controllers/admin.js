@@ -186,7 +186,7 @@ exports.getRole = async(req, res, next) => {
 //admin/slot-available
 
 exports.getSlotAvailable = async (req,res,next) => {
-let dateTime = new Date().toLocaleString("sv-SE");
+console.log(dateTime)
 const date = dateTime.split(" ")[0];
 const hour = dateTime.split(" ")[1];
 const tineEven = hour.split(":")[0];
@@ -198,7 +198,7 @@ const mapStatus = await model.Spot.findAll({
       required: false,
       where: {
         date: date,
-        blockIndex:tineEven
+        blockIndex:hour
       },
       include: [
         {
@@ -218,7 +218,7 @@ const formattedData = mapStatus.map(spot => {
   let check = 0;
     // 1. Lấy thông tin đặt chỗ (nếu có)
     // Vì ta đã filter theo giờ nên mảng ReservationBlocks chỉ có tối đa 1 phần tử
-    const bookingInfo = spot.ReservationBlocks;
+    const bookingInfo =  spot.ReservationBlocks[0] || spot.ReservationBlocks
     const reservation = bookingInfo ? bookingInfo.Reservation : null;
 
     // 2. Thiết lập mặc định là TRỐNG

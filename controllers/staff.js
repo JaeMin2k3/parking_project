@@ -106,14 +106,15 @@ exports.postImageIn = async(req, res, next) => {
       let spotID = reservation.spotId;
       let area = reservation.area;
       let position = reservation.position;
-      const spot = await model.Spot.findOne({where: {id: spotID, status: 'active'}, transaction});
+      const spot = await model.Spot.findOne({where: {id: spotID, status: true }, transaction});
       // kiểm tra spot có hoạt động: xảy ra khi có lỗi với vị trí này admin cập nhập trạng thái của spot gây lỗi
       let newSpot = null;
       if(!spot){
         newSpot = await model.Spot.findOne({where: {
+          status: true,
+          isActive: 1,
           vehicleType: vehicleType,
           slotType: 'OFFLINE',
-          isActive: 1
         }, transaction})
         if(!newSpot) {
           await transaction.rollback();
@@ -130,6 +131,7 @@ exports.postImageIn = async(req, res, next) => {
         {where: {id: reservation.id}, transaction}
       )
       // upadte trạng thái của spot vì spot thuộc loại offline nên phải update
+      // neu newSpot tồn tại
       if(newSpot){
         await model.Spot.update({isActive: false}, {where: {id: newSpot.id}, transaction})
       }
@@ -150,7 +152,9 @@ exports.postImageIn = async(req, res, next) => {
       if(ticket){
         return res.status(200).json({
         area: area,
-        position: position
+        position: position,
+        plate: plate,
+        type: newSpot.vehicleType
       })
       }
       
@@ -158,23 +162,26 @@ exports.postImageIn = async(req, res, next) => {
       // nếu chưa có reservation
       console.log("ko có reservation")
       // tìm kiếm spot đang trống
+      console.log(vehicleType);
+      console.log(plate);
      const spot = await model.Spot.findOne({where: {
+        status: 1,
         isActive: 1,
         vehicleType: vehicleType,
         slotType: "OFFLINE"
       }, transaction});
+      // chek có tìm được không
       if(!spot) return res.status(400).json({message: "slot full"})
-      // console.log(spot);
+      console.log(spot);
     // tạo reservation tạm
       const reservation = await model.Reservation.create( {
         date: date,
-        status: "CHECKIN",
-        ticketType: "off",
-        startTime: dateTime ,
-        spotId: spot.id,
-        plate: plate,
+        status: "CHECKIN", 
         channel: 'OFFLINE',
+        plate: plate,
         vehicleType: vehicleType,
+        spotId: spot.id,
+        
       },{transaction})
       // console.log(reservation);
       // đẩy ảnh lên cloudinary
@@ -183,22 +190,22 @@ exports.postImageIn = async(req, res, next) => {
       await model.Spot.update({isActive: false}, {where: {id: spot.id}, transaction})
       // tạo ticket
       await model.Ticket.create({
+        reservationId: reservation.id,
+        spotId: spot.id,
         date:date,
-        area: spot.area,
-        position: spot.position,
+        plate: plate,
         vehicleType: spot.vehicleType,
         startTime: dateTime,
         status: "active",
-        spotId: spot.id,
         urlCloudinaryCheckIn: uploadResult.secure_url,
-        plate: plate,
-        reservationId: reservation.id,
         staffUsername: req.username
       }, {transaction})
       await transaction.commit(); 
       res.status(200).json({
         area: spot.area,
-        position: spot.position
+        position: spot.position, 
+        plate: plate,
+        type: spot.vehicleType
       })
     }
     
@@ -237,14 +244,29 @@ exports.postImageOut = async(req,res,next) => {
       vehicleType = "MOTORBIKE";
     }
     console.log(vehicleType);
+    // gọi trc để lấy biểu phí
+    const parkingRateStandard = model.ParkingRate.findOne({where: {
+        status: 'active',
+        ticketType: 'STANDARD',
+        vehicleType:vehicleType, 
 
+      }, transaction}) ;
+      const parkingRateOvertime = model.ParkingRate.findOne({where: {
+        status: 'active',
+        ticketType: 'STANDARD',
+        vehicleType:vehicleType, 
+
+      }, transaction}) ;
     // tìm ticket của xe
     const ticket = await model.Ticket.findOne({where: {
       plate: plate,
-      vehicleType: vehicleType
+      vehicleType: vehicleType,
+      status: 'active'
     }, transaction});
+    // lấy reservation
+    const reservation = model.Reservation.findOne({where: {id: ticket.reservationId}});
     
-    // tìm kiếm payment khi đặt online, không check payment vì không phải xe nào cũng đặt trước
+    // tìm kiếm payment khi đặt online
     const payment = await model.Payment.findOne({
         where: {
           reservationId: ticket.reservationId,
@@ -265,9 +287,7 @@ exports.postImageOut = async(req,res,next) => {
     }
 
       let totalPrice = 0;
-      // lấy giá của 1h của loại phương tiện trong paring rate
-      const parkingRate = await model.ParkingRate.findOne({where: {vehicleType:vehicleType }, transaction}) ;
-      let payedMoney = 0;
+      
 
       // tính tiền
       const start = new Date(ticket.startTime);
@@ -276,23 +296,40 @@ exports.postImageOut = async(req,res,next) => {
 
       // chuyển về giờ
       const hours = diffInMillis / (1000 * 60 * 60); 
+      const minutes = hours * 60;
+      const standard = await parkingRateStandard;
+      const overtime = await parkingRateOvertime;
+      const reservation1 = await reservation;
+      let payedMoney = 0;
+      // th: có payment
       if(payment){
           payedMoney = payment.costParking;
           currency = payment.currency;
           // trường hop nay xay ra khi ghe dat online bị loi he thong chuyen sang offline cho khach
           if(spot.slotType === 'OFFLINE'){
-          totalPrice = hours*parkingRate.unitPrice - payedMoney;
-          await model.Spot.update({isActive: true}, {where: {id: ticket.spotId}, transaction})
+            if(hours <= 24 + overtime.gracePeriod/60){
+              totalPrice = Math.ceil(hours)*standard.unitPrice - payedMoney;
+            await model.Spot.update({isActive: true}, {where: {id: ticket.spotId}, transaction})
+            }else{
+              totalPrice = 24*standard.unitPrice + overtime.unitPrice*(Math.ceil(hours -24)) - payedMoney;
+            }
           }else{
             // th nay là chỗ đỗ xe cho online nên không cần update spot
-          payedMoney = payment.costParking;
-          totalPrice = hours*parkingRate.unitPrice - payedMoney;
-          if(totalPrice < 0) totalPrice = 0;
+            if(hours > reservation1.blockCount + overtime.gracePeriod/60){
+              totalPrice = (Math.ceil(hours - reservation1.blockCount)) * overtime.unitPrice;
+            }else{
+              totalPrice = 0;
+            }
+            
       }
       }else{
-        // th này là xe đến trực tiếp
-          totalPrice = hours*parkingRate.unitPrice;
-          await model.Spot.update({isActive: true}, {where: {id: ticket.spotId}, transaction});
+        // th không có payment
+        if(hours <= 24 + overtime.gracePeriod/60){
+              totalPrice = Math.ceil(hours) * standard.unitPrice;
+            }else{
+              totalPrice = 24*standard.unitPrice + overtime.unitPrice*(Math.ceil(hours - 24));
+            }
+          await model.Spot.update({isActive: true}, {where: {id: ticket.spotId}, transaction})
       }
       // đẩy ảnh lên cloud, để nhận về đường dẫn của ảnh
       const uploadResult = await uploadTask;
@@ -306,6 +343,7 @@ exports.postImageOut = async(req,res,next) => {
         totalPrice: totalPrice,
         urlCloudinaryCheckIn: ticket.urlCloudinaryCheckIn,
         urlCloudinaryCheckOut: uploadResult.secure_url,
+        ticketId: ticket.id
       }, {transaction});
 
       // check bill

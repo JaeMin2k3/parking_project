@@ -356,7 +356,7 @@ exports.postAvailableSlot = async (req, res, next) => {
 
   let isOverNight= false;
   if (new Date(dateTimeIn).getDate() !== new Date(dateTimeOut).getDate()) {
-      isOvernight = true;
+      isOverNight = true;
   }
   const blockWhereCondition = {
       status: { [Op.in]: ['CONFIRMED', 'PENDING'] }
@@ -387,6 +387,7 @@ exports.postAvailableSlot = async (req, res, next) => {
   const freeSpots = await model.Spot.findAll({
     attributes: ['id', 'area', 'position', 'isActive', 'vehicleType', 'slotType'],
     where: {
+      status: true,
       isActive: true,
       vehicleType: vehicleType,
       slotType: 'ONLINE',
@@ -517,6 +518,12 @@ exports.postCreateVnpayPayment = async (req, res, next) => {
   if (!reservationId) {
     return res.status(400).json({ message: 'chưa gửi reservationId' });
   }
+
+  // xoá hết payment trc đã tạo
+  await model.Payment.destroy({where: {
+    reservationId: reservationId,
+    status: "PENDING"
+  }})
 
   const t = await sequelize.transaction();
   try {

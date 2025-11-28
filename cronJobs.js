@@ -48,6 +48,17 @@ function initCronJobs() {
             transaction: t
           }
         );
+
+        await model.Payment.update(
+          { status: 'FAILED' }, // Hoặc 'EXPIRED' tuỳ enum của bạn
+          {
+            where: {
+              reservationId: { [Op.in]: reservationIds },
+              status: 'PENDING' // Chỉ update những cái đang chờ
+            },
+            transaction: t
+          }
+        );
       });
 
       console.log(`[CRON] Auto-cancelled ${reservationIds.length} reservations`);
