@@ -44,7 +44,17 @@ VALUES
 INSERT INTO `parking_project`.`customer` (`username`, `password_hash`, `gmail`, `role`, `verified`, `status`, `createdAt`, `updatedAt`) VALUES ('0987287665', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'minhsiu9999@gmail.com', 'customer', 0, 1, now(), now());
 INSERT INTO `parking_project`.`reservations` (`id`, `date`, `startBlock`, `blockCount`, `status`, `channel`, `plate`, `vehicleType`, `createdAt`, `updatedAt`, `user_id`, `spotId`) VALUES (1, '2025-11-19', 11, 2, 'CONFIRMED', 'ONLINE', '30N76789', 'MOTORBIKE', now(), now(), '0987287665', 2);
 
-INSERT INTO parkingrate (vehicleType, currency, unitPrice, createdAt, updatedAt) 
+INSERT INTO parkingrate 
+(vehicleType, currency, unitPrice, ticketType, block, status, gracePeriod, createdAt, updatedAt) 
 VALUES 
-('CAR', 'VND', 10000, NOW(), NOW()),
-('MOTORBIKE', 'VND', 5000, NOW(), NOW());
+-- 1. Ô TÔ - GIÁ CHUẨN (10k / 1 giờ)
+('CAR', 'VND', 10000, 'STANDARD', 1, 'active', 0, NOW(), NOW()),
+
+-- 2. Ô TÔ - GIÁ PHẠT QUÁ GIỜ (20k / 1 giờ - Ân hạn 15p)
+('CAR', 'VND', 20000, 'OVERTIME', 1, 'active', 15, NOW(), NOW()),
+
+-- 3. XE MÁY - GIÁ CHUẨN (5k / 1 giờ)
+('MOTORBIKE', 'VND', 5000, 'STANDARD', 1, 'active', 0, NOW(), NOW()),
+
+-- 4. XE MÁY - GIÁ PHẠT QUÁ GIỜ (10k / 1 giờ - Ân hạn 15p)
+('MOTORBIKE', 'VND', 10000, 'OVERTIME', 1, 'active', 15, NOW(), NOW());
