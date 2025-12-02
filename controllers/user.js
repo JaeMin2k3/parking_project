@@ -391,6 +391,7 @@ exports.postAvailableSlot = async (req, res, next) => {
       isActive: true,
       vehicleType: vehicleType,
       slotType: 'ONLINE',
+      paranoid: true, 
       '$ReservationBlocks.id$': null // chỉ lấy spot không bận 
     },
     include: [
