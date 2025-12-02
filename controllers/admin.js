@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const sequelize = require('../config/database');
 require('dotenv').config();
 const { Op } = require('sequelize');
+const createNewSpots = require('../helper/createNewSpots')
 // admin/login
 exports.postLogin = async(req, res, next) => {
   const {username, password} = req.body;  
@@ -38,7 +39,7 @@ exports.postLogin = async(req, res, next) => {
     }
   } else res.status(401).json(
     {
-      message: "tài khoản không tồn tại"
+      message: "Thông tin đăng nhập không hợp lệ"
     }
   )
 }
@@ -48,15 +49,18 @@ exports.getAllStaffs = async (req,res, next) => {
   try{
       const staffs = await model.Staff.findAll({
       where: {
-        role: "staff"
+        role: "staff",
+        paranoid: false
       },
-      attributes: ["name", "date","username", "status", "createdAt"],
+      attributes: ["name", "date","username", "status", "createdAt",'deletedAt'],
+      order: [['createdAt', 'DESC']],
       raw: true
       });
       res.status(200).json({
         message: "success",
         staffs: staffs || []
       })
+
   }catch(err){
     console.log(err);
     next(err);
@@ -68,9 +72,10 @@ exports.getStaff = async (req,res,next) => {
   const username = req.params.id;
   if(!username) {res.status(404).json({message: "username đang rỗng"})};
   try {
-    const staff = await model.Staff.findOne({where: {
-      username: username
-    }})
+    const staff = await model.Staff.findOne({
+      attributes: ['username', 'name', 'date', 'role', 'status', 'deletedAt'],
+      where: {username: username}
+    })
     if(!staff){res.status(404).json({message: "nhân viên không tồn tại"})};
     return res.status(200).json({
       message: "success",
@@ -85,19 +90,22 @@ exports.getStaff = async (req,res,next) => {
 exports.postDeleteStaff = async (req,res,next) => {
   const id = req.params.idStaff;
   const transaction = await sequelize.transaction();
-
+  console.log(id)
   try {
-    const ok = await model.Staff.destroy({
-      where: {
-        username: id
-      }, transaction
-    });
-    if(!ok) {
+    const ok = await model.Staff.update(
+      {
+        deletedAt: new Date().toLocaleDateString()
+      },
+      {
+      where: {username: id}, transaction
+      }
+    );
+    if(ok === 0) {
       await transaction.rollback();
       return res.status(404).json({message: "tài khoản này không được tìm thấy"});
     }
     await transaction.commit();
-    res.status(200).json({message: "xoá nhân viên thành công"})
+    return res.status(200).json({message: "xoá nhân viên thành công"})
   } catch (error) {
     console.log(error);
     await transaction.rollback();
@@ -107,25 +115,31 @@ exports.postDeleteStaff = async (req,res,next) => {
 // admin/edit/:idStaff
 exports.postEditStaff = async(req,res,next) => {
   const id = req.params.idStaff;
-  const {name, date, pw} = req.body;
-  if(!name || !date || !pw) return res.status(400).json({message: "vui lòng điển đầy đủ các trường thông tin"});
-  const pw_hash = bcrypt.hashSync(pw, 10);
+  // check tồn tại của staff
+  const check = await model.Staff.findOne({
+    where:{username: id},
+    paranoid: false
+  });
+  if(!check) return res.status(404).json({
+    message: 'id không tồn tại'
+  })
+  const {name, date, pw, status} = req.body;
+  const updateData = {
+    name: name,
+    date: date,
+    status: status,
+  }
+  if(pw.trim() !== ""){
+    const pw_hash = bcrypt.hashSync(pw, 10);
+    updateData.password_hash = pw_hash;
+  }
   const transaction = await sequelize.transaction();
   try {
-    const ok = await model.Staff.update(
-    {
-      name: name,
-      date: date,
-      password_hash: pw_hash
-    },
+     await model.Staff.update(
+    updateData,
     {
       where: {username: id}, transaction
     });
-    if(ok[0] === 0){
-      await transaction.rollback();
-      return res.status(404).json({message: "username không tồn tại"})
-    }
-
     await transaction.commit();
     return res.status(200).json({message: "Cập nhật thành công"});
   } catch (error) {
@@ -141,7 +155,8 @@ exports.postNewStaff = async (req,res,next) => {
     console.log(username + "+" + password);
     if(!name || !date || !username || !password) res.status(400).json({message: "vui lòng nhập đủ các trường dữ liệu"})
     const checkStaff = await model.Staff.findOne({
-      where: {username: username}
+      where: {username: username},
+      paranoid: false
     })
     if(checkStaff) return res.status(409).json({
       message: "username đã tồn tại"
@@ -166,6 +181,7 @@ exports.postNewStaff = async (req,res,next) => {
  
 } 
 
+// admin
 
 // admin/auth/token
 exports.getRole = async(req, res, next) => {
@@ -186,12 +202,14 @@ exports.getRole = async(req, res, next) => {
 //admin/slot-available
 
 exports.getSlotAvailable = async (req,res,next) => {
+const dateTime = new Date().toLocaleString("sv-SE");
 console.log(dateTime)
 const date = dateTime.split(" ")[0];
 const hour = dateTime.split(" ")[1];
 const tineEven = hour.split(":")[0];
 const mapStatus = await model.Spot.findAll({
-  attributes: ['id', 'area', 'position', 'vehicleType', 'isActive'],
+  attributes: ['id', 'area', 'position', 'vehicleType', 'isActive', 'status'],
+  paranoid: true,
   include: [
     {
       model: model.ReservationBlock,
@@ -213,6 +231,7 @@ const mapStatus = await model.Spot.findAll({
 let availableSpot = 0;
 let bookedSpot = 0;
 let occupiedSpot = 0;
+let lockedSpot = 0;
 // format dữ liệu trả về
 const formattedData = mapStatus.map(spot => {
   let check = 0;
@@ -220,34 +239,42 @@ const formattedData = mapStatus.map(spot => {
     // Vì ta đã filter theo giờ nên mảng ReservationBlocks chỉ có tối đa 1 phần tử
     const bookingInfo =  spot.ReservationBlocks[0] || spot.ReservationBlocks
     const reservation = bookingInfo ? bookingInfo.Reservation : null;
+    
 
     // 2. Thiết lập mặc định là TRỐNG
     let statusText = 'AVAILABLE';
     let colorCode = '#28a745'; // Màu xanh lá (Bootstrap success)
     let customerType = 'NONE'; // Khách vãng lai hay Online
-
-    // khách đặt online
-    if (reservation) {
-        customerType = 'ONLINE';
-        // đã đặt chỗ chưa checkin
-        if (reservation.status === 'CONFIRMED') {
-            statusText = 'BOOKED'; 
-            colorCode = '#ffc107'; 
-            check = -1;
-        // đặt chỗ và checkIn rồi
-        } else if (reservation.status === 'CHECKIN') {
-            statusText = 'OCCUPIED'; 
-            colorCode = '#dc3545'; 
-            check = 1;
-        }
-    } else {
-      // không đặt online, dựa vào trạng thái của ghế để check khách đến trực tiếp nếu khoá thì đã đỗ còn chưa thì xanh
-        if (!spot.isActive) {
-             statusText = 'OCCUPIED';
-             colorCode = '#dc3545'; 
-             check = 1
-        }
+    if(spot.status === false){
+      statusText = 'locked',
+      colorCode = '#646262ff',
+      lockedSpot++;
+      check = -2;
+    }else {
+      // khách đặt online
+      if (reservation) {
+          customerType = 'ONLINE';
+          // đã đặt chỗ chưa checkin
+          if (reservation.status === 'CONFIRMED') {
+              statusText = 'BOOKED'; 
+              colorCode = '#ffc107'; 
+              check = -1;
+          // đặt chỗ và checkIn rồi
+          } else if (reservation.status === 'CHECKIN') {
+              statusText = 'OCCUPIED'; 
+              colorCode = '#dc3545'; 
+              check = 1;
+          }
+      } else {
+        // không đặt online, dựa vào trạng thái của ghế để check khách đến trực tiếp nếu khoá thì đã đỗ còn chưa thì xanh
+          if (!spot.isActive) {
+              statusText = 'OCCUPIED';
+              colorCode = '#dc3545'; 
+              check = 1
+          }
+      }
     }
+    
     if(check === 0) availableSpot ++;
     if(check === 1) occupiedSpot ++;
     if(check === -1) bookedSpot ++;
@@ -262,13 +289,13 @@ const formattedData = mapStatus.map(spot => {
     };
 });
 
-// Trả về kết quả đã làm đẹp
 res.status(200).json({
     message: "success",
     mapStatus: formattedData,
     availableSlot: availableSpot,
     occupiedSlot: occupiedSpot,
-    bookedSlot: bookedSpot
+    bookedSlot: bookedSpot,
+    lockedSpot: lockedSpot
 });
 
 }
@@ -285,3 +312,113 @@ exports.getInfor = async (req,res,next) =>{
     staff: staff
   })
 }
+// /admin/spots/:area
+exports.getAllSpotWithArea = async (req,res, next) => {
+  const area = req.params.area;
+  const spots = await model.Spot.findAll({
+    attributes: ['area', 'position', 'vehicleType', 'slotType', 'status'],
+    where: {area: area},
+    paranoid: true,
+    order: [['position', 'ASC']],
+  });
+  if(!spots) return res.status(200).json({meseage: "spot trống", spots: []})
+  return res.status(200).json({message: "success", spots: spots})
+}
+
+// /admin/spots/:spotId
+exports.getSpot = async (req, res, next) => {
+  const spotId = req.params.spotId;
+  console.log(spotId);
+  if(!spotId) return res.status(400).json({message: "thông tin không hợp lệ"})
+  const spot = await model.Spot.findOne({
+    attributes: ['id', 'area', 'position', 'vehicleType', 'slotType', 'status' ],
+    where: {id: spotId}}
+  );
+  if(!spot){
+    return res.status(404).json({message: "spot không hợp lệ"});
+  }else{
+    return res.status(200).json({
+      message: "success",
+      spot: spot
+    })
+  }
+}
+
+// admin/trash/deletedSpots
+
+exports.getDeletedSpots = async (req, res, next )=> {
+  const spots = await model.Spot.findAll({
+    attributes: ['id', 'area', 'position', 'vehicleType', 'slotType', 'deletedAt'],
+    where: {
+      deletedAt: {[Op.ne]: null}
+    },
+    paranoid: false,
+  })
+  if(!spots){
+    return res.status(200).json({
+      message: "không spot nào bị xoá",
+      spots: []
+    })
+  }else {
+    return res.status(200).json({
+      message: "success",
+      spots: spots
+    })
+  }
+}
+
+// admin/restore/:spotId
+exports.postRestoreSpot = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+  const spotId = req.params.spotId;
+  try {
+    const update = await model.Spot.update({
+      deletedAt: null
+    },{
+      where: {id: spotId},
+      paranoid: false,
+    });
+    if(!update) {
+      await transaction.rollback();
+      return res.status(500).json({message: "lỗi server vui lòng thử lại sau"});
+    }else{
+      await transaction.commit();
+      return res.status(200).json({meseage: "update thành công"});
+    }
+  } catch (error) {
+    await transaction.rollback();
+    console.log(error);
+  }
+  
+}
+
+// /admin/newSpots
+exports.postNewSpots = async (req, res, next) => {
+  const {area, slotNumber, vehicleType, slotType} = req.body;
+  console.log(req.body);
+  if(!area || slotNumber <= 0  || !vehicleType || !slotType){
+    return res.status(400).json({message: "thiếu trường dữ liệu, vui lòng check lại dữ liệu gửi đi"});
+  }
+  const transaction = await sequelize.transaction()
+  try {
+    const numbers = await model.Spot.count({
+      where: {
+        area: area,
+      },
+      paranoid: false,
+      transaction,
+    });
+    console.log(numbers);
+    await createNewSpots(area, slotNumber, vehicleType, slotType,numbers, transaction); 
+    transaction.commit();
+    return res.status(200).json({message: "success"});
+  } catch (error) {
+    console.log(error);
+    await transaction.rollback();
+    return res.status(500).json({message: "lỗi server vui lòng thử lại sau"})
+  }
+}
+
+
+
+

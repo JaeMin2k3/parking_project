@@ -15,7 +15,7 @@ module.exports = async function isSlotAvailable(spotId, dateTimeIn, dateTimeOut,
     status: { [Op.in]: ['PENDING', 'CONFIRMED'] }
   };
 
-  if (!isOvernight) {
+  if (!isOverNight) {
     //  TRONG NGÀY 
     blockWhereCondition.date = dateTimeIn;
     blockWhereCondition.blockIndex = { [Op.between]: [startBlock, endBlock - 1] };

@@ -8,8 +8,10 @@ module.exports = (sequelize) => {
     date: {type: DataTypes.DATEONLY, allowNull: false},
     role: { type: DataTypes.ENUM('staff', 'admin'), defaultValue: 'staff' },
     status: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+   
   }, {
     tableName: 'staff',
+     paranoid: true,
   });
 
   return Staff;

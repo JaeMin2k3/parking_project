@@ -106,7 +106,7 @@ exports.postImageIn = async(req, res, next) => {
       let spotID = reservation.spotId;
       let area = reservation.area;
       let position = reservation.position;
-      const spot = await model.Spot.findOne({where: {id: spotID, status: true }, transaction});
+      const spot = await model.Spot.findOne({where: {id: spotID, status: true, paranoid: true }, transaction});
       // kiểm tra spot có hoạt động: xảy ra khi có lỗi với vị trí này admin cập nhập trạng thái của spot gây lỗi
       let newSpot = null;
       if(!spot){
@@ -168,7 +168,8 @@ exports.postImageIn = async(req, res, next) => {
         status: 1,
         isActive: 1,
         vehicleType: vehicleType,
-        slotType: "OFFLINE"
+        slotType: "OFFLINE",
+        paranoid: true
       }, transaction});
       // chek có tìm được không
       if(!spot) return res.status(400).json({message: "slot full"})
@@ -277,6 +278,7 @@ exports.postImageOut = async(req,res,next) => {
     // spot của xe
       const spot = await model.Spot.findOne({where: {
         id: ticket.spotId,
+        paranoid: false
       }})
       console.log(spot)
 
@@ -369,6 +371,7 @@ exports.postImageOut = async(req,res,next) => {
        return res.status(200).json({
         message: "success",
         bill: billResponse, 
+        plate: plate
       });
   } catch (error) {
     console.log(error);

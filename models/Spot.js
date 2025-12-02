@@ -7,13 +7,14 @@ const Spot = sequelize.define('Spot', {
   isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true }, // check trangj thai cua spot xe offline da co ai do chua
   vehicleType: {type: DataTypes.ENUM('CAR', 'MOTORBIKE')},
   slotType: { type: DataTypes.ENUM('ONLINE', 'OFFLINE'), allowNull: false, defaultValue: 'OFFLINE' },
-  status: {type: DataTypes.BOOLEAN, defaultValue: true} // do admin quan ly
+  status: {type: DataTypes.BOOLEAN, defaultValue: true}, // do admin quan ly
 }, {
   tableName: 'spots',
   indexes: [
     { unique: true, fields: ['area', 'position'] }, 
     { fields: ['status','isActive', 'vehicleType', 'slotType'] }
   ],
+  paranoid: true,
 });
  return Spot;
 }
