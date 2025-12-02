@@ -181,7 +181,11 @@ exports.postNewStaff = async (req,res,next) => {
  
 } 
 
-// admin
+// admin/restore/:idStaff
+
+exports.postResortSpot = (req, res, next) => {
+  
+}
 
 // admin/auth/token
 exports.getRole = async(req, res, next) => {

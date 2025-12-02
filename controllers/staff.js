@@ -169,8 +169,8 @@ exports.postImageIn = async(req, res, next) => {
         isActive: 1,
         vehicleType: vehicleType,
         slotType: "OFFLINE",
-        paranoid: true
-      }, transaction});
+       
+      }, paranoid: true, transaction});
       // chek có tìm được không
       if(!spot) return res.status(400).json({message: "slot full"})
       console.log(spot);
@@ -278,8 +278,10 @@ exports.postImageOut = async(req,res,next) => {
     // spot của xe
       const spot = await model.Spot.findOne({where: {
         id: ticket.spotId,
-        paranoid: false
-      }})
+        
+      },
+      paranoid: false
+    })
       console.log(spot)
 
     // kiểm tra ticket của xe có tồn tại không
