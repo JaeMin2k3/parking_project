@@ -60,14 +60,17 @@ exports.postImageIn = async(req, res, next) => {
     // console.log(data)
     // console.log(data.results[0].vehicle.type);
     // console.log(data.results[0].plate)
+
     // lấy dữ liệu do bên thứ 3 trả về
     const data = await plateTask;
     const type = data.results[0].vehicle.type;
     const plate = data.results[0].plate?.toUpperCase();
+
     // check biển số
     if(!plate) return res.status(400).json({
       message: "Không thể xác định được biển số vui lòng chụp lại"
     })
+
     // xử lý loại xe
     let vehicleType = "CAR"; 
     if (type === "UNKNOWN") {
@@ -77,14 +80,17 @@ exports.postImageIn = async(req, res, next) => {
     } else {
     vehicleType = "CAR";
     }
-    
-    const reservation = await model.Reservation.findOne(
+    ///// đến chỗ nay
+    const reservation = await model.Reservation.findAll(
       {where: {
         plate: plate, 
         status: "CONFIRMED", 
         vehicleType: vehicleType,
-        date: date,
-        channel: 'ONLINE'
+        channel: 'ONLINE',
+        [Op.or]: [
+          {dateIn: date},
+          {dateOut: date}
+        ]
       }})
     const transaction = await sequelize.transaction();
     // check xem xe có trong bãi chưa
@@ -95,24 +101,39 @@ exports.postImageIn = async(req, res, next) => {
     }, transaction});
     if(checkVehicle) {
       transaction.rollback();
-      return res.status(404).json({message: "xe đã ở trong bãi"})
+      return res.status(404).json({
+        message: "xe đã ở trong bãi"
+      })
     }
     // console.log(checkVehicle);
     // nếu reservation tồn tại
     if(reservation){
-      const booked_end = reservation.startBlock + reservation.blockCount;
+      // xử lí overnight
       const check = await checkTime(reservation);
-      if(!check) return res.status(404).json({message: `thời gian bạn đặt xe từ ${reservation.startBlock}h đến ${(reservation.startBlock+ reservation.blockCount)}h. Vui lòng chờ `})
+      if(!check) return res.status(404).json({
+        message: `thời gian đặt từ ${reservation.startBlock}h - ${reservation.dateIn} đến ${(reservation.startBlock+ reservation.blockCount)}h- ${reservation.dateOut} `
+      })
+      
       let spotID = reservation.spotId;
       let area = reservation.area;
       let position = reservation.position;
-      const spot = await model.Spot.findOne({where: {id: spotID, status: true, paranoid: true }, transaction});
-      // kiểm tra spot có hoạt động: xảy ra khi có lỗi với vị trí này admin cập nhập trạng thái của spot gây lỗi
+      // kiểm tra spot có hoạt động: xảy ra khi có lỗi với vị trí này admin cập nhập trạng thái của spot gây lỗi và kiểm tra xe đã ra chưa
+      const spot = await model.Spot.findOne({
+        where: {
+          id: spotID, 
+          status: true, // xe ra chưa
+          isActive: true , // spot ở trạng thái hoạt động tốt
+          paranoid: true 
+        }, 
+        transaction
+      });
+     
       let newSpot = null;
       if(!spot){
         newSpot = await model.Spot.findOne({where: {
           status: true,
-          isActive: 1,
+          isActive: 1, 
+          status: 1, 
           vehicleType: vehicleType,
           slotType: 'OFFLINE',
         }, transaction})
@@ -133,7 +154,7 @@ exports.postImageIn = async(req, res, next) => {
       // upadte trạng thái của spot vì spot thuộc loại offline nên phải update
       // neu newSpot tồn tại
       if(newSpot){
-        await model.Spot.update({isActive: false}, {where: {id: newSpot.id}, transaction})
+        await model.Spot.update({status: false}, {where: {id: newSpot.id}, transaction})
       }
       const ticket = await model.Ticket.create({
         date: date,
@@ -188,7 +209,7 @@ exports.postImageIn = async(req, res, next) => {
       // đẩy ảnh lên cloudinary
       const uploadResult = await uploadTask;
       // cập nhập lại trạng thái của spot
-      await model.Spot.update({isActive: false}, {where: {id: spot.id}, transaction})
+      await model.Spot.update({status: false}, {where: {id: spot.id}, transaction})
       // tạo ticket
       await model.Ticket.create({
         reservationId: reservation.id,
@@ -212,6 +233,7 @@ exports.postImageIn = async(req, res, next) => {
     
   }catch(err) {
     console.log(err);
+    await transaction.rollback();
     next(err);
   }
 }
@@ -313,7 +335,7 @@ exports.postImageOut = async(req,res,next) => {
           if(spot.slotType === 'OFFLINE'){
             if(hours <= 24 + overtime.gracePeriod/60){
               totalPrice = Math.ceil(hours)*standard.unitPrice - payedMoney;
-            await model.Spot.update({isActive: true}, {where: {id: ticket.spotId}, transaction})
+            await model.Spot.update({status: true}, {where: {id: ticket.spotId}, transaction})
             }else{
               totalPrice = 24*standard.unitPrice + overtime.unitPrice*(Math.ceil(hours -24)) - payedMoney;
             }
@@ -333,7 +355,7 @@ exports.postImageOut = async(req,res,next) => {
             }else{
               totalPrice = 24*standard.unitPrice + overtime.unitPrice*(Math.ceil(hours - 24));
             }
-          await model.Spot.update({isActive: true}, {where: {id: ticket.spotId}, transaction})
+          await model.Spot.update({status: true}, {where: {id: ticket.spotId}, transaction})
       }
       // đẩy ảnh lên cloud, để nhận về đường dẫn của ảnh
       const uploadResult = await uploadTask;

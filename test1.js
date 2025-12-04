@@ -1,25 +1,11 @@
-// let dateTime = new Date().toLocaleString("sv-SE");
-// console.log(dateTime)
-// const date = dateTime.split(" ")[0];
-// const hour = dateTime.split(" ")[1];
-// const tineEven = hour.split(":")[0];
-// console.log(hour);
-// console.log(date);
-// console.log(tineEven);
-// const HOLD_MINUTES = 15;
-// const now = new Date().toLocaleString("sv-SE");
-// console.log(now);
-// const expireTime = new Date(now.getTime() + HOLD_MINUTES * 60 * 1000);
-// console.log(expireTime);
-const dateTimeIn = "2025-11-27"
-const dateTimeOut= "2025-11-28"
-const timeIn = 8 ;
-const timeOut = "15";
-
- const entryDate = new Date(dateTimeIn);
-  const exitDate = new Date(dateTimeOut);
-
-  entryDate.setHours(9, 0, 0 ,0);
-  exitDate.setHours(9, 0, 0, 0);
-
-  console.log(entryDate)
+const nowVN = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+    
+    // Format YYYY-MM-DD
+    const year = nowVN.getFullYear();
+    const month = String(nowVN.getMonth() + 1).padStart(2, '0');
+    const day = String(nowVN.getDate()).padStart(2, '0');
+    const dateString = `${year}-${month}-${day}`; 
+    
+    // Lấy giờ hiện tại VN (0-23)
+    const hours = nowVN.getHours();
+    console.log(dateString)

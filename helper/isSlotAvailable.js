@@ -1,17 +1,14 @@
 const { Op, Transaction } = require('sequelize');
 const model = require('../models/index'); 
 
-// Lưu ý: Thay đổi tham số đầu vào để hỗ trợ check qua đêm chính xác
-module.exports = async function isSlotAvailable(spotId, dateTimeIn, dateTimeOut, startBlock, endBlock) {
-  
-  // 1. Xác định logic Overnight (Giống hệt Controller)
+module.exports = async function isSlotAvailable(spotId, dateTimeIn, dateTimeOut, startBlock, endBlock, plate, vehicleType) {
+  console.log(spotId, dateTimeIn, dateTimeOut, startBlock, endBlock, plate, vehicleType)
   let isOverNight= false;
   if (new Date(dateTimeIn).getDate() !== new Date(dateTimeOut).getDate()) {
       isOverNight = true;
   }
   
   const blockWhereCondition = {
-    spotId: spotId, // Chỉ check đúng cái spot đang định đặt
     status: { [Op.in]: ['PENDING', 'CONFIRMED'] }
   };
 
@@ -41,9 +38,21 @@ module.exports = async function isSlotAvailable(spotId, dateTimeIn, dateTimeOut,
 
   // Đếm số lượng block bị trùng
   const conflictCount = await model.ReservationBlock.count({
-    where: blockWhereCondition
-  });
+    where: {
+    ...blockWhereCondition,
+    [Op.or]: [
+      {
+         spotId: spotId,
+      },
 
+      {
+         plate: plate,
+         vehicleType: vehicleType,
+      }
+    ]
+  }
+  });
+  
  
   return conflictCount === 0; 
 };
