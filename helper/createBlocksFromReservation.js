@@ -3,7 +3,7 @@ const model = require('../models/index')
 
 const HOLD_MINUTES = 15; // thời gian để check giữ chỗ khi thanh toán
 
-module.exports = async function createBlocksFromReservation(reservation, dateTimeIn, dateTimeOut, transaction) {
+module.exports = async function createBlocksFromReservation(reservation, dateTimeIn,dateTimeOut, transaction, plate, vehicleType) {
   const {
     id: reservationId,
     spotId,
@@ -35,6 +35,8 @@ module.exports = async function createBlocksFromReservation(reservation, dateTim
       blockIndex: targetBlockIndex, 
       expireTime,
       status: status || 'PENDING',
+      plate: plate,
+      vehicleType: vehicleType
     });
   }
 

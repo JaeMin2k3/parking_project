@@ -181,7 +181,38 @@ exports.postNewStaff = async (req,res,next) => {
  
 } 
 
-// admin
+// admin/restore/:idStaff
+exports.postResortSpot = async (req, res, next) => {
+  const id = req.params.idStaff;
+  if(!id) return res.status(400).json({
+    message: "vui lòng kiểm tra đầu vào"
+  })
+  const transaction = await sequelize.transaction();
+  try {
+    await model.Staff.update(
+    {
+      deletedAt: null,
+    },{
+      where: {
+        username: id,
+      }, transaction
+    })
+    await transaction.commit();
+    return res.status(200).json({message: "update thành công"})
+  } catch (error) {
+    console.log(error);
+    await transaction.rollback();
+  }
+}
+
+// /admin/trash/deletedStaffs
+exports.getDeletedStaff = async (req,res,next) => {
+  const deletedStaffs = await model.Staff.findAll({where:{
+    deletedAt: {[Op.ne] : null}
+  }})
+  if(!deletedStaffs) return res.status(200).json({message: "success", staffs: []});
+  return res.status(200).json({message: "success", staffs: deletedStaffs});
+}
 
 // admin/auth/token
 exports.getRole = async(req, res, next) => {
@@ -245,7 +276,7 @@ const formattedData = mapStatus.map(spot => {
     let statusText = 'AVAILABLE';
     let colorCode = '#28a745'; // Màu xanh lá (Bootstrap success)
     let customerType = 'NONE'; // Khách vãng lai hay Online
-    if(spot.status === false){
+    if(spot.isActive === false){
       statusText = 'locked',
       colorCode = '#646262ff',
       lockedSpot++;
@@ -267,7 +298,7 @@ const formattedData = mapStatus.map(spot => {
           }
       } else {
         // không đặt online, dựa vào trạng thái của ghế để check khách đến trực tiếp nếu khoá thì đã đỗ còn chưa thì xanh
-          if (!spot.isActive) {
+          if (!spot.status) {
               statusText = 'OCCUPIED';
               colorCode = '#dc3545'; 
               check = 1
@@ -392,6 +423,15 @@ exports.postRestoreSpot = async (req, res, next) => {
   
 }
 
+// /admin/trash/deletedStaffs
+exports.getDeletedStaffs = async (req, res, next) => {
+  const deletedStaffs = await model.Staff.findAll({where: {
+    deletedAt: {[Op.ne]: null}
+  }});
+  if(!deletedStaffs) return res.status(200).json({message: "success", staffs: []});
+  return res.status(200).json({meseage: "success", staffs: deletedStaffs})
+}
+
 // /admin/newSpots
 exports.postNewSpots = async (req, res, next) => {
   const {area, slotNumber, vehicleType, slotType} = req.body;
@@ -418,6 +458,59 @@ exports.postNewSpots = async (req, res, next) => {
     return res.status(500).json({message: "lỗi server vui lòng thử lại sau"})
   }
 }
+
+// /admin/delete/:idSpot
+exports.postDeleteSpot = async(req,res,next) => {
+  const id  = req.params.idSpot;
+  const transaction =  await sequelize.transaction();
+  try {
+    const spot = await model.Spot.findOne({where: {id: id}});
+    if(!spot) {
+      await transaction.rollback();
+      return res.status(404).json({meseage: "spotId không hợp lệ"});
+    }
+    let reservationNumber = await model.Reservation.findOne(
+      {where:{
+        spotId: id,
+        status: {[Op.or]: ['PENDING','CONFIRMED', 'CHECKIN']}
+      }});
+    if(reservationNumber){
+      await transaction.rollback();
+      return res.status(409).json({meseage: "hiện tại đang có người đang đặt slot này bạn không thể xoá được"})
+    }
+    await transaction.commit();
+    return res.status(200).json({message: "deleted successfully"});
+  } catch (error) {
+    console.log(error);
+    await transaction.rollback();
+    return res.status(500).json({message: "lỗi server vui lòng thử lại sau"})
+  }
+}
+
+// admin/edit/:idSpot
+exports.postEditSpot = async (req, res, next) => {
+  const spotId = req.body.idSpot;
+  const { status } = req.body; 
+  const transaction = await sequelize.transaction();
+  try {
+    const spot = await model.Spot.findByPk(spotId, {
+      transaction,
+      lock: true
+    });
+    if(!spot) return res.status(404).json({message: "spot không tồn tại"});
+    if(status !== spot.status){
+      await model.Spot.update({status: status}, {where:{
+        id: spotId
+      }})
+    }
+    await transaction.commit();
+    return res.status(200).json({message: "success"});
+  } catch (error) {
+    console.log(error);
+    await transaction.rollback();
+    return res.status(500).json({message: "lỗi server vui lòng thử lại sau"})
+  }
+};
 
 
 

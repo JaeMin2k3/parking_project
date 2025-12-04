@@ -345,8 +345,8 @@ exports.postAvailableSlot = async (req, res, next) => {
   const ONE_DAY = 24 * 60 * 60 * 1000;
   const ONE_Hour = 60 * 60 * 1000;
 
-  if(entryDate - now < ONE_Hour*2) {
-    return res.status(400).json({message: "thời gian đặt chỗ với thời gian đăt phải cách nhau tối thiểu 2h"});
+  if(entryDate - now < ONE_Hour*48) {
+    return res.status(400).json({message: "thời gian đặt chỗ với thời gian đăt phải cách nhau tối thiểu 48h"});
   }
 
   const diffMs = exitDate - entryDate;
@@ -361,7 +361,7 @@ exports.postAvailableSlot = async (req, res, next) => {
   const blockWhereCondition = {
       status: { [Op.in]: ['CONFIRMED', 'PENDING'] }
   };
-  if (!isOvernight) {
+  if (!isOverNight) {
       // TRƯỜNG HỢP 1: Trong ngày
       blockWhereCondition.date = dateTimeIn;
       blockWhereCondition.blockIndex = { [Op.between]: [startBlock, endBlock - 1] };
@@ -385,15 +385,16 @@ exports.postAvailableSlot = async (req, res, next) => {
       blockWhereCondition[Op.or] = orConditions;
   }
   const freeSpots = await model.Spot.findAll({
-    attributes: ['id', 'area', 'position', 'isActive', 'vehicleType', 'slotType'],
+    attributes: ['id', 'area', 'position', 'status', 'vehicleType', 'slotType'],
     where: {
       status: true,
       isActive: true,
       vehicleType: vehicleType,
       slotType: 'ONLINE',
-      paranoid: true, 
+      
       '$ReservationBlocks.id$': null // chỉ lấy spot không bận 
     },
+    paranoid: true, 
     include: [
       {
         model: model.ReservationBlock,
@@ -419,8 +420,8 @@ if(!freeSpots) return res.status(404).json({
 
 // /user/reservation
 exports.postReservation = async (req, res, next) => {
-  const {id, timeIn, timeOut, dateTimeIn, dateTimeOut, vehicleType, plate } = req.body;
-  const date = new Date();
+  const {id, timeIn, timeOut, dateTimeIn, dateTimeOut, vehicleType, plate} = req.body;
+  console.log(id, timeIn, timeOut, dateTimeIn, dateTimeOut, vehicleType, plate)
   // Validate input
   if (timeIn === undefined || timeOut === undefined || !dateTimeIn || !dateTimeOut || !vehicleType) {
     return res.status(400).json({ message: "vui lòng gửi đủ trường dữ liệu" });
@@ -468,16 +469,17 @@ exports.postReservation = async (req, res, next) => {
   }
   const transaction = await sequelize.transaction();
   try {
-    const check = await isSlotAvailable(id, dateTimeIn, timeIn, blockCount);
+    const check = await isSlotAvailable(id, dateTimeIn, dateTimeOut, startBlock, endBlock, plate, vehicleType);
     if(!check){
       await transaction.rollback();
       return res.status(409).json({ 
-        message: `Chỗ đỗ đã được đặt trong khoảng ${timeIn}:00 - ${timeOut}:00` 
+        message: `trùng thời gian trong khoảng ${timeIn}:00 - ${timeOut}:00` 
       });
     }
     console.log(check);
     const reservation = await model.Reservation.create({
-      date: date,
+      dateIn: dateTimeIn,
+      dateOut: dateTimeOut,
       startBlock: startBlock,
       blockCount: blockCount,
       status: 'PENDING',
@@ -485,14 +487,15 @@ exports.postReservation = async (req, res, next) => {
       plate: plate,
       vehicleType: vehicleType,
       user_id: req.username,
-      spotId: id
+      spotId: id,
+      isOverNight: isOverNight
     },{transaction})
     console.log(reservation);
     if(!reservation){
       await transaction.rollback();
       return res.status(500).json({message: "lỗi server không thể tạo được reservation"});
     }
-    await createBlocksFromReservation(reservation, dateTimeIn, dateTimeOut, transaction);
+    await createBlocksFromReservation(reservation, dateTimeIn, dateTimeOut, transaction, plate, vehicleType);
     await transaction.commit();
     return res.status(201).json({ 
       message: `Đặt chỗ thành công từ ${timeIn}:00 - ngày ${dateTimeIn} đến ${timeOut}:00 - ngày ${dateTimeOut}`,
