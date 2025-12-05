@@ -8,7 +8,7 @@ module.exports = (sequelize) => {
   vehicleType: {type: DataTypes.ENUM('CAR', 'MOTORBIKE')},
   blockIndex: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false }, 
   expireTime: {type: DataTypes.DATE, allowNull: false},
-  status: {type: DataTypes.ENUM('CONFIRMED', 'CANCELLED', 'PENDING','NOSHOW'), default: 'PENDING'}
+  status: {type: DataTypes.ENUM('CONFIRMED', 'CANCELLED', 'PENDING','NOSHOW', 'CHECKIN'), default: 'PENDING'}
 }, {
   tableName: 'reservationBlocks',
 

@@ -6,7 +6,9 @@ const platerecognizer = require('../helper/plateRecognizer');
 const checkTime = require('../helper/checkTime')
 const sequelize = require('../config/database');
 const uploadAndCleanup = require('../helper/uploadAndCleanup');
-
+const checkAvailableTime = require('../helper/checkAvailableTime')
+const {Op} = require('sequelize');
+const findReplaceTime = require('../helper/findReplaceTime')
 // staff/login
 exports.postLogin = async (req,res,next) => {
   const {username, password} = req.body;
@@ -47,208 +49,296 @@ exports.postLogin = async (req,res,next) => {
 }
 
 // /staff/ticket-entry
-exports.postImageIn = async(req, res, next) => {
-  try{
-    
-    let dateTime = new Date().toLocaleString("sv-SE");
-    const date = dateTime.split(" ")[0];
-    const hour = dateTime.split(" ")[1];
-    const tineEven = hour.split(":")[0];
-    const filePath = req.file.path; // do multer đã gắn thông tin của file chứa ảnh vào req.file, ở trong router
-    const plateTask = platerecognizer(filePath);
-    const uploadTask = uploadAndCleanup(filePath);
-    // console.log(data)
-    // console.log(data.results[0].vehicle.type);
-    // console.log(data.results[0].plate)
+exports.postImageIn = async (req, res, next) => {
+   // nhận dữ liệu từ req
+    const filePath = req.file.path; 
+    // khởi tạo trc
+    const plateTask = platerecognizer(filePath); 
+    const uploadTask = uploadAndCleanup(filePath); 
 
-    // lấy dữ liệu do bên thứ 3 trả về
-    const data = await plateTask;
-    const type = data.results[0].vehicle.type;
-    const plate = data.results[0].plate?.toUpperCase();
+    let transaction; 
 
-    // check biển số
-    if(!plate) return res.status(400).json({
-      message: "Không thể xác định được biển số vui lòng chụp lại"
-    })
+    try {
+        //  lấy thời gian hiện tại
+        const now = new Date();
+        const dateTime = now.toLocaleString("sv-SE"); 
+        const date = dateTime.split(" ")[0];
+        const hour = now.getHours();
+        const minute = now.getMinutes();
+        const currentHour = hour + minute / 60;
+        console.log(currentHour) 
 
-    // xử lý loại xe
-    let vehicleType = "CAR"; 
-    if (type === "UNKNOWN") {
-      return res.status(400).json({ message: "Không thể xác định loại xe, vui lòng chụp lại" });
-    } else if (type === "Motorcycle") {
-      vehicleType = "MOTORBIKE";
-    } else {
-    vehicleType = "CAR";
-    }
-    ///// đến chỗ nay
-    const reservation = await model.Reservation.findAll(
-      {where: {
-        plate: plate, 
-        status: "CONFIRMED", 
-        vehicleType: vehicleType,
-        channel: 'ONLINE',
-        [Op.or]: [
-          {dateIn: date},
-          {dateOut: date}
-        ]
-      }})
-    const transaction = await sequelize.transaction();
-    // check xem xe có trong bãi chưa
-    const checkVehicle = await model.Ticket.findOne({where: {
-      plate: plate,
-      vehicleType: vehicleType,
-      status: 'active'
-    }, transaction});
-    if(checkVehicle) {
-      transaction.rollback();
-      return res.status(404).json({
-        message: "xe đã ở trong bãi"
-      })
-    }
-    // console.log(checkVehicle);
-    // nếu reservation tồn tại
-    if(reservation){
-      // xử lí overnight
-      const check = await checkTime(reservation);
-      if(!check) return res.status(404).json({
-        message: `thời gian đặt từ ${reservation.startBlock}h - ${reservation.dateIn} đến ${(reservation.startBlock+ reservation.blockCount)}h- ${reservation.dateOut} `
-      })
-      
-      let spotID = reservation.spotId;
-      let area = reservation.area;
-      let position = reservation.position;
-      // kiểm tra spot có hoạt động: xảy ra khi có lỗi với vị trí này admin cập nhập trạng thái của spot gây lỗi và kiểm tra xe đã ra chưa
-      const spot = await model.Spot.findOne({
-        where: {
-          id: spotID, 
-          status: true, // xe ra chưa
-          isActive: true , // spot ở trạng thái hoạt động tốt
-          paranoid: true 
-        }, 
-        transaction
-      });
-     
-      let newSpot = null;
-      if(!spot){
-        newSpot = await model.Spot.findOne({where: {
-          status: true,
-          isActive: 1, 
-          status: 1, 
-          vehicleType: vehicleType,
-          slotType: 'OFFLINE',
-        }, transaction})
-        if(!newSpot) {
-          await transaction.rollback();
-          return res.status(404).json({message: "slot của bạn đã đặt đang bảo trì, tôi đã cố gắng tìm slot cho bạn nhưng không tìm được"});
+        // Đợi kết quả nhận diện biển số 
+        const data = await plateTask;
+        const typeRaw = data.results[0]?.vehicle?.type;
+        const plate = data.results[0]?.plate?.toUpperCase();
+
+        // Validate biển số
+        if (!plate) {
+            return res.status(400).json({ 
+                message: "Không thể xác định được biển số, vui lòng chụp lại" 
+            });
         }
-        // gắn lại giá trị new spot
-        spotID = newSpot.id;
-        area = newSpot.area;
-        position = newSpot.position;
-      }
-      const uploadResult = await uploadTask;
-      await model.Reservation.update(
-        {status: 'CHECKIN'},
-        {where: {id: reservation.id}, transaction}
-      )
-      // upadte trạng thái của spot vì spot thuộc loại offline nên phải update
-      // neu newSpot tồn tại
-      if(newSpot){
-        await model.Spot.update({status: false}, {where: {id: newSpot.id}, transaction})
-      }
-      const ticket = await model.Ticket.create({
-        date: date,
-        reservationId: reservation.id,
-        spotId: spotID,
-        vehicleType: spot.vehicleType,
-        bookedStart: reservation.startBlock,
-        bookedEnd: booked_end,
-        startTime: dateTime,
-        status: 'active',
-        urlCloudinaryCheckIn: uploadResult.secure_url,
-        plate: plate,
-        staffUsername: req.username
-      }, {transaction})
-      await transaction.commit(); 
-      if(ticket){
-        return res.status(200).json({
-        area: area,
-        position: position,
-        plate: plate,
-        type: newSpot.vehicleType
-      })
-      }
-      
-    }else{
-      // nếu chưa có reservation
-      console.log("ko có reservation")
-      // tìm kiếm spot đang trống
-      console.log(vehicleType);
-      console.log(plate);
-     const spot = await model.Spot.findOne({where: {
-        status: 1,
-        isActive: 1,
-        vehicleType: vehicleType,
-        slotType: "OFFLINE",
-       
-      }, paranoid: true, transaction});
-      // chek có tìm được không
-      if(!spot) return res.status(400).json({message: "slot full"})
-      console.log(spot);
-    // tạo reservation tạm
-      const reservation = await model.Reservation.create( {
-        date: date,
-        status: "CHECKIN", 
-        channel: 'OFFLINE',
-        plate: plate,
-        vehicleType: vehicleType,
-        spotId: spot.id,
-        
-      },{transaction})
-      // console.log(reservation);
-      // đẩy ảnh lên cloudinary
-      const uploadResult = await uploadTask;
-      // cập nhập lại trạng thái của spot
-      await model.Spot.update({status: false}, {where: {id: spot.id}, transaction})
-      // tạo ticket
-      await model.Ticket.create({
-        reservationId: reservation.id,
-        spotId: spot.id,
-        date:date,
-        plate: plate,
-        vehicleType: spot.vehicleType,
-        startTime: dateTime,
-        status: "active",
-        urlCloudinaryCheckIn: uploadResult.secure_url,
-        staffUsername: req.username
-      }, {transaction})
-      await transaction.commit(); 
-      res.status(200).json({
-        area: spot.area,
-        position: spot.position, 
-        plate: plate,
-        type: spot.vehicleType
-      })
-    }
-    
-  }catch(err) {
-    console.log(err);
-    await transaction.rollback();
-    next(err);
-  }
-}
 
+        // Validate loại xe
+        let vehicleType = "CAR";
+        if (typeRaw === "Motorcycle") {
+            vehicleType = "MOTORBIKE";
+        } else if (typeRaw === "UNKNOWN") {
+            return res.status(400).json({ message: "Không thể xác định loại xe" });
+        }
+
+        
+        transaction = await sequelize.transaction();
+
+        // Kiểm tra xem xe đã có trong bãi chưa 
+        const checkVehicle = await model.Ticket.findOne({
+            where: {
+                plate: plate,
+                vehicleType: vehicleType,
+                status: 'active'
+            }, 
+            transaction
+        });
+
+        if (checkVehicle) {
+            await transaction.rollback();
+            return res.status(400).json({ message: "Xe đang ở trong bãi" });
+        }
+
+        console.log(plate);
+        console.log(vehicleType);
+        // 2.2 Tìm Reservation hợp lệ
+        const reservation = await model.Reservation.findOne({
+            where: {
+                plate: plate,
+                status: "CONFIRMED",
+                vehicleType: vehicleType,
+                channel: 'ONLINE',
+                [Op.or]: [
+                    // Vé trong ngày
+                    {
+                        dateIn: date,
+                        [Op.and]: [
+                            sequelize.literal(`(startBlock + blockCount - 1/6) > ${currentHour}`),
+                            sequelize.literal(`startBlock <= ${currentHour}`) 
+                        ]
+                    },
+                    // Vé qua đêm (check ngày ra)
+                    {
+                        dateOut: date,
+                        [Op.and]: [
+                          sequelize.literal(`(startBlock + blockCount) > (${currentHour} + 24 + 1/6)`)
+                        ]
+                    }
+                ]
+            },
+            transaction
+        });
+        console.log(reservation);
+
+        let spotId = null;
+        let area = null;
+        let position = null;
+        let ticketReservationId = null;
+        let bookedStart = hour; 
+        let bookedEnd = null; 
+
+        //  CÓ ĐẶT TRƯỚC (ONLINE) 
+        if (reservation) {
+            // Check logic thời gian chi tiết 
+            const isValidTime = await checkTime(reservation);
+            if (!isValidTime) {
+                await transaction.rollback();
+                return res.status(404).json({
+                    message: `Chưa đến giờ vào hoặc đã quá hạn. Thời gian đặt: ${reservation.startBlock}h`
+                });
+            }
+
+            spotId = reservation.spotId;
+            area = reservation.area;
+            position = reservation.position;
+            ticketReservationId = reservation.id;
+            bookedStart = reservation.startBlock;
+            // Tính bookedEnd dựa trên reservation
+            bookedEnd = (reservation.startBlock + reservation.blockCount) % 24;
+
+            // Kiểm tra Spot có khả dụng không (Phòng trường hợp Spot bị hỏng sau khi khách đặt)
+            const spot = await model.Spot.findOne({
+                where: { id: spotId, }, 
+                paranoid: true,
+                transaction
+            });
+
+            // Nếu Spot lỗi/bảo trì -> Tìm Spot thay thế
+            if (!spot || spot.isActive === false || spot.status === false) {
+                let newSpot = await findReplaceTime(reservation, transaction);
+                
+                // Nếu không tìm được slot thay thế đúng chuẩn -> Tìm đại 1 slot Offline trống
+                if (!newSpot) {
+                    newSpot = await model.Spot.findOne({
+                        where: {
+                            status: true,
+                            isActive: true,
+                            vehicleType: vehicleType,
+                            slotType: 'OFFLINE',
+                        }, 
+                        transaction
+                    });
+                    // check còn slot offline không
+                  if (!newSpot) {
+                    await transaction.rollback();
+                    return res.status(404).json({ message: "Chỗ đỗ của bạn đang bảo trì và bãi xe đã hết chỗ thay thế." });
+                  }
+                }
+
+                
+
+                // Cập nhật lại thông tin Spot mới
+                spotId = newSpot.id;
+                console.log(spotId + "newSpotID");
+                area = newSpot.area;
+                position = newSpot.position;
+                
+                // Update Reservation và reservationBlock trỏ sang Spot mới
+                Promise.all([
+                  await model.Reservation.update({ spotId: spotId, status: 'CHECKIN' },{ where: { id: reservation.id }, transaction }),
+                  await model.ReservationBlock.update({spotId: spotId, status: 'CHECKIN'}, {where:{reservationId: reservation.id}})
+                ])
+                
+            }else {
+              // nếu mà spot vẫn hoạt động tốt
+               Promise.all([
+                  await model.Reservation.update({ status: 'CHECKIN' },{ where: { id: reservation.id }, transaction }),
+                  await model.ReservationBlock.update({status: 'CHECKIN'}, {where:{reservationId: reservation.id}})
+                ])
+            }
+
+
+        } 
+        // KHÁCH VÃNG LAI (OFFLINE)
+        else {
+            // 1. Tìm ghế OFFLINE trước
+            const spotOffline = await model.Spot.findOne({
+                where: {
+                    status: true,
+                    isActive: true,
+                    vehicleType: vehicleType,
+                    slotType: "OFFLINE",
+                }, 
+                paranoid: true, 
+                transaction
+            });
+
+            if (spotOffline) {
+                spotId = spotOffline.id;
+                area = spotOffline.area;
+                position = spotOffline.position;
+            } else {
+                // 2. Nếu hết ghế Offline -> Check ghế Online còn trống (dùng hàm checkAvailableTime đã sửa)
+                const availableSpots = await checkAvailableTime(vehicleType, transaction);
+                
+                if (availableSpots.length === 0) {
+                    await transaction.rollback();
+                    return res.status(404).json({ message: "Bãi xe đã hết chỗ trống" });
+                }
+                
+                spotId = availableSpots[0].id;
+                area = availableSpots[0].area;
+                position = availableSpots[0].position;
+            }
+
+            // Tạo Reservation ảo cho khách vãng lai
+            const newReservation = await model.Reservation.create({
+                dateIn: date,
+                status: "CHECKIN",
+                channel: 'OFFLINE',
+                plate: plate,
+                vehicleType: vehicleType,
+                spotId: spotId,
+            }, { transaction });
+
+            ticketReservationId = newReservation.id;
+            bookedEnd = null; // Khách vãng lai có thể không có giờ ra cố định
+        }
+
+        // --- BƯỚC CHUNG: TẠO TICKET & UPDATE SPOT ---
+
+        // Update trạng thái Spot thành "Đang có xe" (status = false)
+        await model.Spot.update(
+            { status: false }, 
+            { where: { id: spotId }, transaction }
+        );
+
+        // Tạo Ticket (Lưu ý: urlCloudinaryCheckIn để NULL tạm thời)
+        const ticket = await model.Ticket.create({
+            date: date,
+            reservationId: ticketReservationId,
+            spotId: spotId,
+            vehicleType: vehicleType,
+            bookedStart: bookedStart,
+            bookedEnd: bookedEnd,
+            startTime: dateTime,
+            status: 'active',
+            plate: plate,
+            staffUsername: req.username
+        }, { transaction });
+
+        // COMMIT TRANSACTION NGAY LẬP TỨC
+        await transaction.commit();
+
+        // --- GIAI ĐOẠN 3: PHẢN HỒI KHÁCH HÀNG (MỞ BARIE) ---
+        // Trả kết quả ngay cho client
+        res.status(200).json({
+            message: "Check-in thành công",
+            area: area,
+            position: position,
+            plate: plate,
+            type: vehicleType,
+            ticketId: ticket.id // Trả về ID để client biết hoặc log
+        });
+
+        // --- GIAI ĐOẠN 4: BACKGROUND JOB (UPLOAD ẢNH & UPDATE DB) ---
+        // Phần này chạy ngầm sau khi hàm đã return response
+        try {
+            // Bây giờ mới await kết quả upload
+            const uploadResult = await uploadTask;
+            
+            if (uploadResult && uploadResult.secure_url) {
+                // Update link ảnh vào ticket
+                await model.Ticket.update(
+                    { urlCloudinaryCheckIn: uploadResult.secure_url },
+                    { where: { id: ticket.id } }
+                );
+                console.log(`[Success] Đã cập nhật ảnh check-in cho xe ${plate}`);
+            }
+        } catch (bgError) {
+            console.error(`[Background Error] Lỗi upload ảnh xe ${plate}:`, bgError);
+            // Gợi ý: Lưu log lỗi vào bảng riêng để có cronjob chạy quét và upload lại nếu cần
+        }
+
+    } catch (err) {
+        console.error("Lỗi Check-in:", err);
+        // Chỉ rollback nếu transaction chưa commit/rollback
+        if (transaction && !transaction.finished) {
+            await transaction.rollback();
+        }
+        next(err);
+    }
+};
 // /staff/free-entry
 exports.postImageOut = async(req,res,next) => {
+  const filePath = req.file.path;
+  const plateTask = platerecognizer(filePath);
+  const uploadTask = uploadAndCleanup(filePath);
   // tạo 1 phiên giao 
   const transaction = await sequelize.transaction();
   try {
     let dateTime = new Date().toLocaleString("sv-SE");
     
-    const filePath = req.file.path;
+    
     // khởi tạo trước gọi api bên thứ 3 và đẩy ảnh lên cloud
-    const plateTask = platerecognizer(filePath);
-    const uploadTask = uploadAndCleanup(filePath);
+    
     // lấy dữ liệu
     const data = await plateTask;
     const type = data.results[0].vehicle.type;
