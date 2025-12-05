@@ -7,15 +7,13 @@ const crypto = require('crypto');
 const { mailer } = require('../config/mailer');
 const sequelize = require('../config/database');
 
-const ReservationBlock = require('../models/ReservationBlock');
 const isSlotAvailable = require('../helper/isSlotAvailable');
 const createBlocksFromReservation = require('../helper/createBlocksFromReservation');
 
-
 const vnpay = require('../config/vnpay');
-const { VnpLocale, dateFormat, ProductCode } = require('vnpay'); // helper từ lib
+const { VnpLocale, dateFormat, ProductCode } = require('vnpay'); 
 const createAndSendVerifyLink = require('../helper/createAndSendVerifyLink');
-const { transcode } = require('buffer');
+
 
 // user/login
 exports.postLogin = async (req, res, next) => {
@@ -448,8 +446,8 @@ exports.postReservation = async (req, res, next) => {
   const ONE_DAY = 24 * 60 * 60 * 1000;
   const ONE_Hour = 60 * 60 * 1000;
 
-  if(entryDate - now < ONE_Hour*2) {
-    return res.status(400).json({message: "thời gian đặt chỗ với thời gian đăt phải cách nhau tối thiểu 2h"});
+  if(entryDate - now < ONE_DAY*2) {
+    return res.status(400).json({message: "thời gian đặt phải cách ngày đặt là 2 ngày"});
   }
 
   const diffMs = exitDate - entryDate;
@@ -458,7 +456,7 @@ exports.postReservation = async (req, res, next) => {
   }
   
   let isOverNight = false;
-  if (new Date(dateTimeIn).getDate() !== new Date(dateTimeOut).getDate()) {
+  if (dateTimeIn.trim() !== dateTimeOut.trim()) {
       isOverNight = true;
   }
   let blockCount = 0;
@@ -497,7 +495,7 @@ exports.postReservation = async (req, res, next) => {
     }
     await createBlocksFromReservation(reservation, dateTimeIn, dateTimeOut, transaction, plate, vehicleType);
     await transaction.commit();
-    return res.status(201).json({ 
+    return res.status(200).json({ 
       message: `Đặt chỗ thành công từ ${timeIn}:00 - ngày ${dateTimeIn} đến ${timeOut}:00 - ngày ${dateTimeOut}`,
       reservation: {
         id: reservation.id,

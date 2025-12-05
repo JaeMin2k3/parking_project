@@ -5,7 +5,7 @@ const model = require('./models/index');
 const sequelize = require('./config/database');
 
 
-// TASK 1: Xử lý đơn chờ thanh toán quá hạn (PENDING -> CANCELLED)
+//  Xử lý đơn chờ thanh toán quá hạn (PENDING -> CANCELLED)
 
 async function cleanPendingReservations(t) {
     const now = new Date();
@@ -40,11 +40,11 @@ async function cleanPendingReservations(t) {
 }
 
 
-// TASK 2: Xử lý đơn đã đặt nhưng KHÔNG ĐẾN (CONFIRMED -> NO_SHOW)
+// Xử lý đơn đã đặt nhưng KHÔNG ĐẾN (CONFIRMED -> NO_SHOW)
 
 async function cleanNoShowReservations(t) {
    const date = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' });
-   const hours = new Date().getHours(); // đây là lấy giờ của máy chủ chưa xử lí máy chủ ở khu vục khác
+   const hours = new Date().getHours(); 
    const dateString = date.toString();
 
     // lấy toàn bộ reservation đã thanh toán thành công
@@ -83,13 +83,9 @@ async function cleanNoShowReservations(t) {
 }
 
 
-// MAIN CRON FUNCTION
 function initCronJobs() {
     // Chạy mỗi phút
     cron.schedule('* * * * *', async () => {
-        const now = new Date();
-        // console.log('[CRON] Scanning...', now.toISOString());
-
         try {
             await sequelize.transaction(async (t) => {
                 // Chạy song song cả 2 task dọn dẹp
@@ -100,6 +96,8 @@ function initCronJobs() {
 
                 if (pendingCount > 0 || noShowCount > 0) {
                     console.log(`[CRON] Cleaned: ${pendingCount} Pending Timeout | ${noShowCount} No-Show`);
+                }else{
+                    console.log("hello")
                 }
             });
         } catch (err) {

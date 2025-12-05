@@ -28,6 +28,30 @@ SELECT
     NOW()       -- updatedAt
 FROM NumberSeries;
 
+INSERT INTO spots (area, position, isActive, vehicleType, slotType, createdAt, updatedAt)
+WITH RECURSIVE NumberSeries AS (
+    -- 1. Điểm neo: Bắt đầu chuỗi số từ 1
+    SELECT 1 AS n
+    UNION ALL
+    -- 2. Phần đệ quy: Cộng 1 cho đến khi n < 100 (sẽ dừng ở 100)
+    SELECT n + 1
+    FROM NumberSeries
+    WHERE n < 100
+)
+-- 3. Chèn dữ liệu từ chuỗi số đã tạo
+SELECT
+    'A',        -- GIẢ ĐỊNH: area. Bạn có thể thay đổi.
+    n,          -- position (1, 2, 3, ..., 100)
+    1,          -- GIẢ ĐỊNH: isActive = 1 (true).
+    'CAR',      -- GIẢ ĐỊNH: vehicleType. Đổi thành 'MOTORBIKE' nếu cần.
+    CASE
+        WHEN n <= 70 THEN 'OFFLINE' -- 70 hàng đầu tiên
+        ELSE 'ONLINE'               -- 30 hàng còn lại
+    END AS slotType,
+    NOW(),      -- createdAt
+    NOW()       -- updatedAt
+FROM NumberSeries;
+
 INSERT INTO staff (username, password_hash, name, date, role, status, createdAt, updatedAt)
 VALUES
 ('staff2', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'Nhân viên 2', '2025-11-14', 'staff', 1, NOW(), NOW()),
@@ -42,8 +66,6 @@ VALUES
 ('admin', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'Quản trị viên', '2025-11-14', 'admin', 1, NOW(), NOW());
 
 INSERT INTO `parking_project`.`customer` (`username`, `password_hash`, `gmail`, `role`, `verified`, `status`, `createdAt`, `updatedAt`) VALUES ('0987287665', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'minhsiu9999@gmail.com', 'customer', 0, 1, now(), now());
-INSERT INTO `parking_project`.`reservations` (`id`, `date`, `startBlock`, `blockCount`, `status`, `channel`, `plate`, `vehicleType`, `createdAt`, `updatedAt`, `user_id`, `spotId`) VALUES (1, '2025-11-19', 11, 2, 'CONFIRMED', 'ONLINE', '30N76789', 'MOTORBIKE', now(), now(), '0987287665', 2);
-
 INSERT INTO parkingrate 
 (vehicleType, currency, unitPrice, ticketType, block, status, gracePeriod, createdAt, updatedAt) 
 VALUES 
@@ -58,3 +80,30 @@ VALUES
 
 -- 4. XE MÁY - GIÁ PHẠT QUÁ GIỜ (10k / 1 giờ - Ân hạn 15p)
 ('MOTORBIKE', 'VND', 10000, 'OVERTIME', 1, 'active', 15, NOW(), NOW());
+
+
+
+INSERT INTO `parking_project`.`reservations`
+(`dateIn`, `dateOut`, `startBlock`, `blockCount`, `status`, `channel`,
+ `plate`, `vehicleType`, `isOverNight`, `createdAt`, `updatedAt`,
+ `user_id`, `spotId`)
+VALUES
+('2025-12-05', '2025-12-05', 22, 2, 'CONFIRMED', 'ONLINE',
+ '37A55555', 'CAR', 0, NOW(), NOW(), '0987287665', 198);
+
+
+
+ INSERT INTO parking_project.reservationblocks
+    (`date`, `plate`, `vehicleType`,
+     `blockIndex`, `expireTime`, `status`,
+     `createdAt`, `updatedAt`,
+     `reservationId`, `spotId`)
+VALUES
+    ('2025-12-05', '37A55555', 'CAR',
+     22, NOW(), 'CONFIRMED',
+     NOW(), NOW(),
+     1, 198),
+    ('2025-12-05', '37A55555', 'CAR',
+     23, NOW(), 'CONFIRMED',
+     NOW(), NOW(),
+     1, 198);

@@ -13,7 +13,7 @@ module.exports = (sequelize) => {
     startTime: { type: DataTypes.DATE, allowNull: false },
     finishTime: {type: DataTypes.DATE, allowNull:true},
     status: {type: DataTypes.ENUM('active','inactive'), allowNull: false, default: 'active'},
-    urlCloudinaryCheckIn: {type: DataTypes.STRING(100), allowNull: false},
+    urlCloudinaryCheckIn: {type: DataTypes.STRING(100), allowNull: true},
   }, {
     tableName: 'tickets',
     index: [
