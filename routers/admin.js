@@ -24,4 +24,9 @@ router.post('/restore/:spotId', controllerAdmin.postRestoreSpot);
 router.post('/newSpots', controllerAdmin.postNewSpots);
 router.post('/delete/:idSpot', controllerAdmin.postDeleteSpot)
 
+// Report & Charts Routes
+router.get('/report/monthly-revenue', isAdmin, controllerAdmin.getMonthlyRevenue);
+router.get('/report/monthly-vehicles', isAdmin, controllerAdmin.getMonthlyVehicles);
+router.get('/report/vehicle-ratio', isAdmin, controllerAdmin.getVehicleRatio);
+
 module.exports = router;
