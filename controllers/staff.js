@@ -235,7 +235,7 @@ exports.postImageIn = async (req, res, next) => {
                 area = spotOffline.area;
                 position = spotOffline.position;
             } else {
-                // 2. Nếu hết ghế Offline -> Check ghế Online còn trống (dùng hàm checkAvailableTime đã sửa)
+                // 2. Nếu hết ghế Offline -> Check ghế Online còn trống
                 const availableSpots = await checkAvailableTime(vehicleType, transaction);
                 
                 if (availableSpots.length === 0) {
@@ -262,15 +262,14 @@ exports.postImageIn = async (req, res, next) => {
             bookedEnd = null; // Khách vãng lai có thể không có giờ ra cố định
         }
 
-        // --- BƯỚC CHUNG: TẠO TICKET & UPDATE SPOT ---
-
+        
         // Update trạng thái Spot thành "Đang có xe" (status = false)
         await model.Spot.update(
             { status: false }, 
             { where: { id: spotId }, transaction }
         );
 
-        // Tạo Ticket (Lưu ý: urlCloudinaryCheckIn để NULL tạm thời)
+        // Tạo Ticket 
         const ticket = await model.Ticket.create({
             date: date,
             reservationId: ticketReservationId,
@@ -284,22 +283,20 @@ exports.postImageIn = async (req, res, next) => {
             staffUsername: req.username
         }, { transaction });
 
-        // COMMIT TRANSACTION NGAY LẬP TỨC
+        
         await transaction.commit();
 
-        // --- GIAI ĐOẠN 3: PHẢN HỒI KHÁCH HÀNG (MỞ BARIE) ---
-        // Trả kết quả ngay cho client
+        
         res.status(200).json({
             message: "Check-in thành công",
             area: area,
             position: position,
             plate: plate,
             type: vehicleType,
-            ticketId: ticket.id // Trả về ID để client biết hoặc log
+            ticketId: ticket.id 
         });
 
-        // --- GIAI ĐOẠN 4: BACKGROUND JOB (UPLOAD ẢNH & UPDATE DB) ---
-        // Phần này chạy ngầm sau khi hàm đã return response
+        // UPLOAD ẢNH & UPDATE DB
         try {
             // Bây giờ mới await kết quả upload
             const uploadResult = await uploadTask;
@@ -310,15 +307,14 @@ exports.postImageIn = async (req, res, next) => {
                     { urlCloudinaryCheckIn: uploadResult.secure_url },
                     { where: { id: ticket.id } }
                 );
-                console.log(`[Success] Đã cập nhật ảnh check-in cho xe ${plate}`);
+                console.log(` Đã cập nhật ảnh check-in cho xe ${plate}`);
             }
-        } catch (bgError) {
-            console.error(`[Background Error] Lỗi upload ảnh xe ${plate}:`, bgError);
-            // Gợi ý: Lưu log lỗi vào bảng riêng để có cronjob chạy quét và upload lại nếu cần
+        } catch (err) {
+            console.log(err)
         }
 
     } catch (err) {
-        console.error("Lỗi Check-in:", err);
+        console.error( err);
         // Chỉ rollback nếu transaction chưa commit/rollback
         if (transaction && !transaction.finished) {
             await transaction.rollback();
@@ -336,8 +332,6 @@ exports.postImageOut = async(req,res,next) => {
   try {
     let dateTime = new Date().toLocaleString("sv-SE");
     
-    
-    // khởi tạo trước gọi api bên thứ 3 và đẩy ảnh lên cloud
     
     // lấy dữ liệu
     const data = await plateTask;
@@ -370,6 +364,7 @@ exports.postImageOut = async(req,res,next) => {
         vehicleType:vehicleType, 
 
       }, transaction}) ;
+      
     // tìm ticket của xe
     const ticket = await model.Ticket.findOne({where: {
       plate: plate,
@@ -421,32 +416,21 @@ exports.postImageOut = async(req,res,next) => {
       if(payment){
           payedMoney = payment.costParking;
           currency = payment.currency;
-          // trường hop nay xay ra khi ghe dat online bị loi he thong chuyen sang offline cho khach
-          if(spot.slotType === 'OFFLINE'){
-            if(hours <= 24 + overtime.gracePeriod/60){
-              totalPrice = Math.ceil(hours)*standard.unitPrice - payedMoney;
-            await model.Spot.update({status: true}, {where: {id: ticket.spotId}, transaction})
-            }else{
-              totalPrice = 24*standard.unitPrice + overtime.unitPrice*(Math.ceil(hours -24)) - payedMoney;
-            }
+          if(hours > reservation1.blockCount){
+            totalPrice = 24*standard.unitPrice + overtime.unitPrice*(Math.ceil(hours -reservation1.blockCount)) - payedMoney;
           }else{
-            // th nay là chỗ đỗ xe cho online nên không cần update spot
-            if(hours > reservation1.blockCount + overtime.gracePeriod/60){
-              totalPrice = (Math.ceil(hours - reservation1.blockCount)) * overtime.unitPrice;
-            }else{
-              totalPrice = 0;
-            }
-            
-      }
+            totalPrice = 0;
+          }
+         
       }else{
-        // th không có payment
         if(hours <= 24 + overtime.gracePeriod/60){
               totalPrice = Math.ceil(hours) * standard.unitPrice;
             }else{
               totalPrice = 24*standard.unitPrice + overtime.unitPrice*(Math.ceil(hours - 24));
             }
-          await model.Spot.update({status: true}, {where: {id: ticket.spotId}, transaction})
       }
+      // cập nhật trạng thái của spot
+      await model.Spot.update({status: true}, {where: {id: ticket.spotId}, transaction});
       // đẩy ảnh lên cloud, để nhận về đường dẫn của ảnh
       const uploadResult = await uploadTask;
 
@@ -468,7 +452,7 @@ exports.postImageOut = async(req,res,next) => {
         return res.status(500).json({message: "lỗi server không thể tạo bill"})      
       }
 
-      // chạy song song 2 sql update -> rút gắn thời gian
+      // chạy song song 2 sql update
       await Promise.all([
         await model.Ticket.update({finishTime: dateTime,status: 'inactive',},
         {where: {id: ticket.id}, transaction}),

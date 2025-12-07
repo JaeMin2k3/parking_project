@@ -97,7 +97,7 @@ function initCronJobs() {
                 if (pendingCount > 0 || noShowCount > 0) {
                     console.log(`[CRON] Cleaned: ${pendingCount} Pending Timeout | ${noShowCount} No-Show`);
                 }else{
-                    console.log("hello")
+                   
                 }
             });
         } catch (err) {

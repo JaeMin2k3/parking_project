@@ -27,7 +27,7 @@ Reservation.belongsTo(Customer, {
   targetKey: 'username',
 });
 
-// Spot — Reservation  (FK ở Reservation.spotId)
+// Spot — Reservation  
 Spot.hasMany(Reservation, { foreignKey: 'spotId', onDelete: 'SET NULL', onUpdate: 'CASCADE' });
 Reservation.belongsTo(Spot,  { foreignKey: 'spotId' });
 
@@ -39,7 +39,7 @@ Payment.belongsTo(Reservation,{ foreignKey: 'reservationId' });
 Reservation.hasOne(Ticket, { foreignKey: 'reservationId', onDelete: 'SET NULL', onUpdate: 'CASCADE' });
 Ticket.belongsTo(Reservation, { foreignKey: 'reservationId' }); 
 
-// Spot — Ticket (để lưu lịch sử vé theo chỗ)
+// Spot — Ticket 
 Spot.hasMany(Ticket, { foreignKey: 'spotId', onUpdate: 'CASCADE', sourceKey: 'id' });
 Ticket.belongsTo(Spot, { foreignKey: 'spotId', targetKey: 'id'  });
 

@@ -2,14 +2,10 @@ const { Op } = require('sequelize');
 const model = require('../models/index');
 
 module.exports = async function findReplaceTime(reservation, transaction) {
-    // 1. Extract dữ liệu từ reservation để tránh lỗi undefined
+   
     const startBlock = reservation.startBlock;
     const blockCount = reservation.blockCount;
-    // Giả sử logic là start + count. Nếu bạn có logic khác để tính endBlock, hãy sửa ở đây
     const endBlock = (startBlock + blockCount) % 24; 
-    
-    // Logic xác định qua đêm dựa trên reservation (hoặc tính toán lại)
-    // Lưu ý: Sửa lỗi chính tả resvation -> reservation
     const isOverNight = reservation.isOverNight; 
 
     const blockWhereCondition = {

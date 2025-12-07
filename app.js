@@ -5,7 +5,7 @@ const sequelize = require('./config/database');
 const cors = require('cors');
 require('dotenv').config();             
 const { initCronJobs } = require('./cronJobs');
-initCronJobs();
+
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -44,6 +44,7 @@ sequelize.sync()
     io.on('connection', socket => {
       console.log('Client connected');
     });
+    initCronJobs();
   })
   .catch(err => {
     console.log(err);

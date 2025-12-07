@@ -5,6 +5,9 @@ const sequelize = require('../config/database');
 require('dotenv').config();
 const { Op } = require('sequelize');
 const createNewSpots = require('../helper/createNewSpots')
+const io = require('../socket');
+
+
 // admin/login
 exports.postLogin = async(req, res, next) => {
   const {username, password} = req.body;  
@@ -44,14 +47,17 @@ exports.postLogin = async(req, res, next) => {
   )
 }
 
+//============================================================================= STAFF=======================================================================
+
 //admin/staffs
 exports.getAllStaffs = async (req,res, next) => {
   try{
       const staffs = await model.Staff.findAll({
       where: {
         role: "staff",
-        paranoid: false
+        
       },
+      paranoid: false,
       attributes: ["name", "date","username", "status", "createdAt",'deletedAt'],
       order: [['createdAt', 'DESC']],
       raw: true
@@ -182,7 +188,7 @@ exports.postNewStaff = async (req,res,next) => {
 } 
 
 // admin/restore/:idStaff
-exports.postResortSpot = async (req, res, next) => {
+exports.postRestoreStaff = async (req, res, next) => {
   const id = req.params.idStaff;
   if(!id) return res.status(400).json({
     message: "vui lòng kiểm tra đầu vào"
@@ -214,122 +220,6 @@ exports.getDeletedStaff = async (req,res,next) => {
   return res.status(200).json({message: "success", staffs: deletedStaffs});
 }
 
-// admin/auth/token
-exports.getRole = async(req, res, next) => {
-  try {
-    const token = req.headers['authorization'];
-    if(!token) res.status(401).json({message: "Token không tồn tại"});
-      const decode = await jwt.verify(token, process.env.SECRET_KEY);
-      res.status(200).json({
-        message: "success",
-        role: decode.role
-      })
-    } catch (err) {
-      console.log(err);
-      res.status(401).json({meseage: "Token không hợp lệ hoặc hết hạn"})
-    }
-}
-
-//admin/slot-available
-
-exports.getSlotAvailable = async (req,res,next) => {
-const dateTime = new Date().toLocaleString("sv-SE");
-console.log(dateTime)
-const date = dateTime.split(" ")[0];
-const hour = dateTime.split(" ")[1];
-const tineEven = hour.split(":")[0];
-const mapStatus = await model.Spot.findAll({
-  attributes: ['id', 'area', 'position', 'vehicleType', 'isActive', 'status'],
-  paranoid: true,
-  include: [
-    {
-      model: model.ReservationBlock,
-      required: false,
-      where: {
-        date: date,
-        blockIndex:hour
-      },
-      include: [
-        {
-          model: model.Reservation,
-          attributes: ['status', 'channel', 'plate']
-        }
-      ]
-    }
-  ]
-})
-
-let availableSpot = 0;
-let bookedSpot = 0;
-let occupiedSpot = 0;
-let lockedSpot = 0;
-// format dữ liệu trả về
-const formattedData = mapStatus.map(spot => {
-  let check = 0;
-    // 1. Lấy thông tin đặt chỗ (nếu có)
-    // Vì ta đã filter theo giờ nên mảng ReservationBlocks chỉ có tối đa 1 phần tử
-    const bookingInfo =  spot.ReservationBlocks[0] || spot.ReservationBlocks
-    const reservation = bookingInfo ? bookingInfo.Reservation : null;
-    
-
-    // 2. Thiết lập mặc định là TRỐNG
-    let statusText = 'AVAILABLE';
-    let colorCode = '#28a745'; // Màu xanh lá (Bootstrap success)
-    let customerType = 'NONE'; // Khách vãng lai hay Online
-    if(spot.isActive === false){
-      statusText = 'locked',
-      colorCode = '#646262ff',
-      lockedSpot++;
-      check = -2;
-    }else {
-      // khách đặt online
-      if (reservation) {
-          customerType = 'ONLINE';
-          // đã đặt chỗ chưa checkin
-          if (reservation.status === 'CONFIRMED') {
-              statusText = 'BOOKED'; 
-              colorCode = '#ffc107'; 
-              check = -1;
-          // đặt chỗ và checkIn rồi
-          } else if (reservation.status === 'CHECKIN') {
-              statusText = 'OCCUPIED'; 
-              colorCode = '#dc3545'; 
-              check = 1;
-          }
-      } else {
-        // không đặt online, dựa vào trạng thái của ghế để check khách đến trực tiếp nếu khoá thì đã đỗ còn chưa thì xanh
-          if (!spot.status) {
-              statusText = 'OCCUPIED';
-              colorCode = '#dc3545'; 
-              check = 1
-          }
-      }
-    }
-    
-    if(check === 0) availableSpot ++;
-    if(check === 1) occupiedSpot ++;
-    if(check === -1) bookedSpot ++;
-    return {
-        id: spot.id,
-        area: spot.area,
-        position: spot.position,
-        vehicleType: spot.vehicleType, // CAR hoặc MOTORBIKE 
-        status: statusText,            // AVAILABLE / BOOKED / OCCUPIED
-        color: colorCode,              // Mã màu hex để tô nền
-        channel: customerType     // ONLINE / OFFLINE / NONE
-    };
-});
-
-res.status(200).json({
-    message: "success",
-    mapStatus: formattedData,
-    availableSlot: availableSpot,
-    occupiedSlot: occupiedSpot,
-    bookedSlot: bookedSpot,
-    lockedSpot: lockedSpot
-});
-
-}
 
 // /admin/infor
 exports.getInfor = async (req,res,next) =>{
@@ -343,6 +233,11 @@ exports.getInfor = async (req,res,next) =>{
     staff: staff
   })
 }
+
+
+//==========================================================SPOT=========================================
+
+
 // /admin/spots/:area
 exports.getAllSpotWithArea = async (req,res, next) => {
   const area = req.params.area;
@@ -862,3 +757,163 @@ exports.getVehicleRatio = async (req, res, next) => {
 
 
 
+
+//===============================================EXTENTION=====================================================
+// admin/auth/token
+exports.getRole = async(req, res, next) => {
+  try {
+    const token = req.headers['authorization'];
+    if(!token) res.status(401).json({message: "Token không tồn tại"});
+      const decode = await jwt.verify(token, process.env.SECRET_KEY);
+      res.status(200).json({
+        message: "success",
+        role: decode.role
+      })
+    } catch (err) {
+      console.log(err);
+      res.status(401).json({meseage: "Token không hợp lệ hoặc hết hạn"})
+    }
+}
+
+//admin/slot-available
+
+exports.getSlotAvailable = async (req,res,next) => {
+const dateTime = new Date().toLocaleString("sv-SE");
+console.log(dateTime)
+const date = dateTime.split(" ")[0];
+const hour = dateTime.split(" ")[1];
+const tineEven = hour.split(":")[0];
+const mapStatus = await model.Spot.findAll({
+  attributes: ['id', 'area', 'position', 'vehicleType', 'isActive', 'status'],
+  paranoid: true,
+  include: [
+    {
+      model: model.ReservationBlock,
+      required: false,
+      where: {
+        date: date,
+        blockIndex:hour
+      },
+      include: [
+        {
+          model: model.Reservation,
+          attributes: ['status', 'channel', 'plate']
+        }
+      ]
+    }
+  ]
+})
+
+let availableSpot = 0;
+let bookedSpot = 0;
+let occupiedSpot = 0;
+let lockedSpot = 0;
+// format dữ liệu trả về
+const formattedData = mapStatus.map(spot => {
+  let check = 0;
+    // 1. Lấy thông tin đặt chỗ (nếu có)
+    // Vì ta đã filter theo giờ nên mảng ReservationBlocks chỉ có tối đa 1 phần tử
+    const bookingInfo =  spot.ReservationBlocks[0] || spot.ReservationBlocks
+    const reservation = bookingInfo ? bookingInfo.Reservation : null;
+    
+
+    // 2. Thiết lập mặc định là TRỐNG
+    let statusText = 'AVAILABLE';
+    let colorCode = '#28a745'; // Màu xanh lá (Bootstrap success)
+    let customerType = 'NONE'; // Khách vãng lai hay Online
+    if(spot.isActive === false){
+      statusText = 'locked',
+      colorCode = '#646262ff',
+      lockedSpot++;
+      check = -2;
+    }else {
+      // khách đặt online
+      if (reservation) {
+          customerType = 'ONLINE';
+          // đã đặt chỗ chưa checkin
+          if (reservation.status === 'CONFIRMED') {
+              statusText = 'BOOKED'; 
+              colorCode = '#ffc107'; 
+              check = -1;
+          // đặt chỗ và checkIn rồi
+          } else if (reservation.status === 'CHECKIN') {
+              statusText = 'OCCUPIED'; 
+              colorCode = '#dc3545'; 
+              check = 1;
+          }
+      } else {
+        // không đặt online, dựa vào trạng thái của ghế để check khách đến trực tiếp nếu khoá thì đã đỗ còn chưa thì xanh
+          if (!spot.status) {
+              statusText = 'OCCUPIED';
+              colorCode = '#dc3545'; 
+              check = 1
+          }
+      }
+    }
+    
+    if(check === 0) availableSpot ++;
+    if(check === 1) occupiedSpot ++;
+    if(check === -1) bookedSpot ++;
+    return {
+        id: spot.id,
+        area: spot.area,
+        position: spot.position,
+        vehicleType: spot.vehicleType, // CAR hoặc MOTORBIKE 
+        status: statusText,            // AVAILABLE / BOOKED / OCCUPIED
+        color: colorCode,              // Mã màu hex để tô nền
+        channel: customerType     // ONLINE / OFFLINE / NONE
+    };
+});
+io.getIO().emit('parkingStatus', {
+  action: 'updateParking',
+  data: {
+    mapStatus: formattedData,
+    availableSlot: availableSpot,
+    occupiedSlot: occupiedSpot,
+    bookedSlot: bookedSpot,
+    lockedSpot: lockedSpot
+  }
+})
+
+res.status(200).json({
+    message: "success",
+    mapStatus: formattedData,
+    availableSlot: availableSpot,
+    occupiedSlot: occupiedSpot,
+    bookedSlot: bookedSpot,
+    lockedSpot: lockedSpot
+});
+
+}
+
+
+exports.getAllTickets = async (req, res, next) => {
+  const tickets = await model.Ticket.findAll({
+    attributes: ['id', 'spotId', 'startTime', 'finishTime', 'plate', 'vehicleType', 'status'],
+    order: ['createdAt', 'DESC']
+  })
+  if(!tickets) return res.status(200).json({
+    meseage: "success", 
+    tickets: []
+  })
+  
+  const mapTickets = tickets.map(ticket => {
+    let colorCode = '#dc3545'
+    if(ticket.status === 'active') colorCode = '#28a745'
+    return {
+      id: ticket.id,
+      spotId: ticket.spotId,
+      TimeIn: ticket.startTime,
+      TimeOut: ticket.finishTime,
+      plate: ticket.plate,
+      vehicleType: ticket.vehicleType,
+      colorCode: colorCode
+    }
+  })
+
+  return res.status(200).json({
+    message: "success",
+    tickets: mapTickets
+  })
+
+}
