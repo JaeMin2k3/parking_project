@@ -699,3 +699,41 @@ exports.vnpayIpn = async (req, res) => {
     return res.status(200).json({ RspCode: '99', Message: 'Unknow error' });
   }
 };
+
+const io = require('../socket');
+
+// /user/parking/status
+exports.getAllSlotStatus = async (req, res, next) => {
+  const [carNumbers, motorNumbers] = await Promise.all([
+    model.Spot.count({
+    where: {
+      vehicleType: 'CAR',
+      slotType: 'OFFLINE',
+      isActive: true,
+      status: true
+    }
+  }),
+    model.Spot.count({
+    where: {
+      vehicleType: 'MOTORBIKE',
+      slotType: 'OFFLINE',
+      isActive: true,
+      status: true
+    }
+  })
+  ])
+  
+  io.getIO().emit('slotStatus', {
+    action: 'updateStatus',
+    data: {
+      carNumbers: carNumbers,
+    motorNumbers: motorNumbers
+    }
+    
+  })
+  return res.status(200).json({
+    message: "success",
+    carNumbers: carNumbers,
+    motorNumbers: motorNumbers,
+  })
+}

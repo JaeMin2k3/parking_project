@@ -1,7 +1,6 @@
 const express = require('express');
 const router  = express.Router();
 const controllerAdmin = require('../controllers/admin')
-const TokenVerify = require('../middleware/jwt')
 const isAdmin = require('../middleware/isAdmin')
 router.post('/login', controllerAdmin.postLogin);
 router.post('/newStaff', isAdmin, controllerAdmin.postNewStaff)
@@ -9,19 +8,19 @@ router.get('/staffs', isAdmin, controllerAdmin.getAllStaffs);
 router.get('/staff/:id',isAdmin, controllerAdmin.getStaff);
 router.post('/edit/:idStaff',isAdmin, controllerAdmin.postEditStaff);
 router.post('/delete/:idStaff',isAdmin, controllerAdmin.postDeleteStaff);
-router.post('/restore/:idStaff', controllerAdmin.postRestoreSpot);
-router.get('/trash/deletedStaffs', controllerAdmin.getDeletedStaffs);
-
-router.get('/slot-available',isAdmin,controllerAdmin.getSlotAvailable)
-router.get('/auth/token',isAdmin, controllerAdmin.getRole);
+router.post('/restore/:idStaff',isAdmin, controllerAdmin.postRestoreStaff);
+router.get('/trash/deletedStaffs', isAdmin,controllerAdmin.getDeletedStaffs);
 router.get('/infor',isAdmin, controllerAdmin.getInfor);
 
 
-router.get('/spots/area/:area', controllerAdmin.getAllSpotWithArea);
-router.get('/spots/:spotId', controllerAdmin.getSpot);
-router.get('/trash/deletedSpots', controllerAdmin.getDeletedSpots);
-router.post('/restore/:spotId', controllerAdmin.postRestoreSpot);
-router.post('/newSpots', controllerAdmin.postNewSpots);
-router.post('/delete/:idSpot', controllerAdmin.postDeleteSpot)
+router.get('/spots/area/:area', isAdmin,controllerAdmin.getAllSpotWithArea);
+router.get('/spots/:spotId', isAdmin,controllerAdmin.getSpot);
+router.get('/trash/deletedSpots', isAdmin,controllerAdmin.getDeletedSpots);
+router.post('/restore/:spotId', isAdmin,controllerAdmin.postRestoreSpot);
+router.post('/newSpots', isAdmin,controllerAdmin.postNewSpots);
+router.post('/delete/:idSpot',isAdmin, controllerAdmin.postDeleteSpot)
 
+router.get('/auth/token',isAdmin, controllerAdmin.getRole);
+router.get('/slot-available',isAdmin,controllerAdmin.getSlotAvailable);
+router.get('/allTickets', controllerAdmin.getAllTickets)
 module.exports = router;
