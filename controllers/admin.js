@@ -407,6 +407,353 @@ exports.postEditSpot = async (req, res, next) => {
   }
 };
 
+// ========== REPORTS & CHARTS ==========
+
+// /admin/report/monthly-revenue
+// GET /admin/report/monthly-revenue?year=2025&month=11
+exports.getMonthlyRevenue = async (req, res, next) => {
+  try {
+    const year = req.query.year || new Date().getFullYear();
+    const month = req.query.month || new Date().getMonth() + 1;
+
+    // Get number of days in the month
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    // Initialize revenue array for each day
+    const dailyRevenue = Array(daysInMonth).fill(0).map((_, index) => ({
+      day: index + 1,
+      revenue: 0,
+      billCount: 0,
+      reservationCount: 0
+    }));
+
+    // Get revenue from Bills (walk-in customers)
+    const bills = await model.Bill.findAll({
+      attributes: [
+        [sequelize.fn('DAY', sequelize.col('paid_at')), 'day'],
+        [sequelize.fn('SUM', sequelize.col('total_amount')), 'totalRevenue'],
+        [sequelize.fn('COUNT', sequelize.col('id')), 'billCount']
+      ],
+      where: {
+        payment_status: 'PAID',
+        paid_at: {
+          [Op.between]: [
+            new Date(year, month - 1, 1),
+            new Date(year, month, 0, 23, 59, 59)
+          ]
+        }
+      },
+      group: [sequelize.fn('DAY', sequelize.col('paid_at'))],
+      raw: true
+    });
+
+    // Get revenue from Payments (online reservations)
+    const payments = await model.Payment.findAll({
+      attributes: [
+        [sequelize.fn('DAY', sequelize.col('updatedAt')), 'day'],
+        [sequelize.fn('SUM', sequelize.col('amount')), 'totalRevenue'],
+        [sequelize.fn('COUNT', sequelize.col('id')), 'paymentCount']
+      ],
+      where: {
+        status: 'SUCCEEDED',
+        updatedAt: {
+          [Op.between]: [
+            new Date(year, month - 1, 1),
+            new Date(year, month, 0, 23, 59, 59)
+          ]
+        }
+      },
+      group: [sequelize.fn('DAY', sequelize.col('updatedAt'))],
+      raw: true
+    });
+
+    // Merge bill revenue
+    bills.forEach(bill => {
+      const dayIndex = parseInt(bill.day) - 1;
+      if (dayIndex >= 0 && dayIndex < daysInMonth) {
+        dailyRevenue[dayIndex].revenue += parseFloat(bill.totalRevenue || 0);
+        dailyRevenue[dayIndex].billCount = parseInt(bill.billCount || 0);
+      }
+    });
+
+    // Merge payment revenue
+    payments.forEach(payment => {
+      const dayIndex = parseInt(payment.day) - 1;
+      if (dayIndex >= 0 && dayIndex < daysInMonth) {
+        dailyRevenue[dayIndex].revenue += parseFloat(payment.totalRevenue || 0);
+        dailyRevenue[dayIndex].reservationCount = parseInt(payment.paymentCount || 0);
+      }
+    });
+
+    // Calculate total and average
+    const totalRevenue = dailyRevenue.reduce((sum, day) => sum + day.revenue, 0);
+    const averageRevenue = totalRevenue / daysInMonth;
+
+    return res.status(200).json({
+      message: "success",
+      year: parseInt(year),
+      month: parseInt(month),
+      totalRevenue: Math.round(totalRevenue),
+      averageRevenue: Math.round(averageRevenue),
+      dailyRevenue: dailyRevenue.map(day => ({
+        day: day.day,
+        revenue: Math.round(day.revenue),
+        billCount: day.billCount,
+        reservationCount: day.reservationCount
+      }))
+    });
+
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
+
+// /admin/report/monthly-vehicles
+// GET /admin/report/monthly-vehicles?year=2025&month=11
+exports.getMonthlyVehicles = async (req, res, next) => {
+  try {
+    const year = req.query.year || new Date().getFullYear();
+    const month = req.query.month || new Date().getMonth() + 1;
+
+    // Get number of days in the month
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    // Initialize vehicle count array for each day
+    const dailyVehicles = Array(daysInMonth).fill(0).map((_, index) => ({
+      day: index + 1,
+      totalVehicles: 0,
+      cars: 0,
+      motorbikes: 0
+    }));
+
+    // Count vehicles from Tickets (actual entry/exit)
+    const tickets = await model.Ticket.findAll({
+      attributes: [
+        [sequelize.fn('DAY', sequelize.col('actual_entry')), 'day'],
+        'vehicleType',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'vehicleCount']
+      ],
+      where: {
+        actual_entry: {
+          [Op.between]: [
+            new Date(year, month - 1, 1),
+            new Date(year, month, 0, 23, 59, 59)
+          ]
+        }
+      },
+      group: [
+        sequelize.fn('DAY', sequelize.col('actual_entry')),
+        'vehicleType'
+      ],
+      raw: true
+    });
+
+    // Count vehicles from Reservations (online bookings)
+    const reservations = await model.Reservation.findAll({
+      attributes: [
+        [sequelize.fn('DAY', sequelize.col('date')), 'day'],
+        'vehicleType',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'vehicleCount']
+      ],
+      where: {
+        date: {
+          [Op.between]: [
+            `${year}-${String(month).padStart(2, '0')}-01`,
+            `${year}-${String(month).padStart(2, '0')}-${daysInMonth}`
+          ]
+        },
+        status: {
+          [Op.in]: ['CONFIRMED', 'CHECKIN', 'CHECKOUT']
+        }
+      },
+      group: [
+        sequelize.fn('DAY', sequelize.col('date')),
+        'vehicleType'
+      ],
+      raw: true
+    });
+
+    // Merge ticket data
+    tickets.forEach(ticket => {
+      const dayIndex = parseInt(ticket.day) - 1;
+      const count = parseInt(ticket.vehicleCount || 0);
+      
+      if (dayIndex >= 0 && dayIndex < daysInMonth) {
+        dailyVehicles[dayIndex].totalVehicles += count;
+        if (ticket.vehicleType === 'CAR') {
+          dailyVehicles[dayIndex].cars += count;
+        } else if (ticket.vehicleType === 'MOTORBIKE') {
+          dailyVehicles[dayIndex].motorbikes += count;
+        }
+      }
+    });
+
+    // Merge reservation data
+    reservations.forEach(reservation => {
+      const dayIndex = parseInt(reservation.day) - 1;
+      const count = parseInt(reservation.vehicleCount || 0);
+      
+      if (dayIndex >= 0 && dayIndex < daysInMonth) {
+        dailyVehicles[dayIndex].totalVehicles += count;
+        if (reservation.vehicleType === 'CAR') {
+          dailyVehicles[dayIndex].cars += count;
+        } else if (reservation.vehicleType === 'MOTORBIKE') {
+          dailyVehicles[dayIndex].motorbikes += count;
+        }
+      }
+    });
+
+    // Calculate totals
+    const totalVehicles = dailyVehicles.reduce((sum, day) => sum + day.totalVehicles, 0);
+    const totalCars = dailyVehicles.reduce((sum, day) => sum + day.cars, 0);
+    const totalMotorbikes = dailyVehicles.reduce((sum, day) => sum + day.motorbikes, 0);
+    const averageVehicles = totalVehicles / daysInMonth;
+
+    return res.status(200).json({
+      message: "success",
+      year: parseInt(year),
+      month: parseInt(month),
+      summary: {
+        totalVehicles,
+        totalCars,
+        totalMotorbikes,
+        averageVehicles: Math.round(averageVehicles * 100) / 100
+      },
+      dailyVehicles: dailyVehicles
+    });
+
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
+
+// /admin/report/vehicle-ratio
+// GET /admin/report/vehicle-ratio?year=2025&month=11
+// Or GET /admin/report/vehicle-ratio?startDate=2025-01-01&endDate=2025-12-31 (for custom range)
+exports.getVehicleRatio = async (req, res, next) => {
+  try {
+    let startDate, endDate;
+    let periodLabel;
+
+    if (req.query.startDate && req.query.endDate) {
+      // Custom date range
+      startDate = new Date(req.query.startDate);
+      endDate = new Date(req.query.endDate);
+      periodLabel = `${req.query.startDate} to ${req.query.endDate}`;
+    } else {
+      // Monthly (default to current month)
+      const year = req.query.year || new Date().getFullYear();
+      const month = req.query.month || new Date().getMonth() + 1;
+      startDate = new Date(year, month - 1, 1);
+      endDate = new Date(year, month, 0, 23, 59, 59);
+      periodLabel = `${year}-${String(month).padStart(2, '0')}`;
+    }
+
+    // Count vehicles from Tickets
+    const ticketCounts = await model.Ticket.findAll({
+      attributes: [
+        'vehicleType',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+      ],
+      where: {
+        actual_entry: {
+          [Op.between]: [startDate, endDate]
+        }
+      },
+      group: ['vehicleType'],
+      raw: true
+    });
+
+    // Count vehicles from Reservations
+    const reservationCounts = await model.Reservation.findAll({
+      attributes: [
+        'vehicleType',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+      ],
+      where: {
+        date: {
+          [Op.between]: [
+            startDate.toISOString().split('T')[0],
+            endDate.toISOString().split('T')[0]
+          ]
+        },
+        status: {
+          [Op.in]: ['CONFIRMED', 'CHECKIN', 'CHECKOUT']
+        }
+      },
+      group: ['vehicleType'],
+      raw: true
+    });
+
+    // Initialize counts
+    let carCount = 0;
+    let motorbikeCount = 0;
+
+    // Sum from tickets
+    ticketCounts.forEach(ticket => {
+      const count = parseInt(ticket.count || 0);
+      if (ticket.vehicleType === 'CAR') {
+        carCount += count;
+      } else if (ticket.vehicleType === 'MOTORBIKE') {
+        motorbikeCount += count;
+      }
+    });
+
+    // Sum from reservations
+    reservationCounts.forEach(reservation => {
+      const count = parseInt(reservation.count || 0);
+      if (reservation.vehicleType === 'CAR') {
+        carCount += count;
+      } else if (reservation.vehicleType === 'MOTORBIKE') {
+        motorbikeCount += count;
+      }
+    });
+
+    const totalVehicles = carCount + motorbikeCount;
+
+    // Calculate percentages
+    const carPercentage = totalVehicles > 0 ? (carCount / totalVehicles * 100) : 0;
+    const motorbikePercentage = totalVehicles > 0 ? (motorbikeCount / totalVehicles * 100) : 0;
+
+    return res.status(200).json({
+      message: "success",
+      period: periodLabel,
+      totalVehicles,
+      vehicleRatio: {
+        cars: {
+          count: carCount,
+          percentage: Math.round(carPercentage * 100) / 100
+        },
+        motorbikes: {
+          count: motorbikeCount,
+          percentage: Math.round(motorbikePercentage * 100) / 100
+        }
+      },
+      // Data formatted for pie/donut charts
+      chartData: [
+        {
+          label: 'Ô tô',
+          value: carCount,
+          percentage: Math.round(carPercentage * 100) / 100,
+          color: '#007bff'
+        },
+        {
+          label: 'Xe máy',
+          value: motorbikeCount,
+          percentage: Math.round(motorbikePercentage * 100) / 100,
+          color: '#28a745'
+        }
+      ]
+    });
+
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
+
 
 
 
