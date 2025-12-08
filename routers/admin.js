@@ -23,4 +23,9 @@ router.post('/delete/:idSpot',isAdmin, controllerAdmin.postDeleteSpot)
 router.get('/auth/token',isAdmin, controllerAdmin.getRole);
 router.get('/slot-available',isAdmin,controllerAdmin.getSlotAvailable);
 router.get('/allTickets', controllerAdmin.getAllTickets)
+// Report & Charts Routes
+router.get('/report/monthly-revenue', isAdmin, controllerAdmin.getMonthlyRevenue);
+router.get('/report/monthly-vehicles', isAdmin, controllerAdmin.getMonthlyVehicles);
+router.get('/report/vehicle-ratio', isAdmin, controllerAdmin.getVehicleRatio);
+
 module.exports = router;
