@@ -1,7 +1,7 @@
 const model = require('../models/index');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { Op } = require('sequelize');
+const { Op, col } = require('sequelize');
 require('dotenv').config();
 const crypto = require('crypto');
 const { mailer } = require('../config/mailer');
@@ -727,7 +727,7 @@ exports.getAllSlotStatus = async (req, res, next) => {
     action: 'updateStatus',
     data: {
       carNumbers: carNumbers,
-    motorNumbers: motorNumbers
+      motorNumbers: motorNumbers
     }
     
   })
@@ -735,5 +735,54 @@ exports.getAllSlotStatus = async (req, res, next) => {
     message: "success",
     carNumbers: carNumbers,
     motorNumbers: motorNumbers,
+  })
+}
+
+exports.getActiveReservationNumbers = async (req, res, next) => {
+  const numbers = await model.Reservation.count({where: {
+    status: "CONFIRMED"
+  }})
+  return res.status(200).json({
+    message: "success",
+    numbers: numbers
+  })
+}
+
+exports.getReservations =  async (req, res, next) =>{
+  const idUser = req.body.username;
+  const reservations = await model.Reservation.findAll({
+    where:{
+      userId: idUser,
+      status: {[Op.in]: ['PENDING', 'CONFIRMED', 'CHECKIN'] }
+    } 
+  });
+  if(!reservations) return res.status(200).json({
+    message: "success",
+    reservations: []
+  })
+
+  const mapReservations = reservations.map(async (reservation) => {
+    let color;
+    const spot = model.Spot.findOne({where: {id: reservation.spotId}, paranoid: false});
+    if(reservation.status === 'PENDING') color = '#F59E0B'
+    else if(reservation.status === 'CONFIRMED') color = '#10B981'
+    else if(reservation.status === 'CHECKIN') color = '#0EA5E9'
+    const spotResult = await spot;
+    return {
+      id: reservation.id,
+      dateIn: reservation.dateIn,
+      dateOut: reservation.dateOut,
+      startBlock: reservation.startBlock,
+      blockCount: reservation.blockCount,
+      plate: reservation.plate,
+      vehicleType: reservation.vehicleType,
+      area: spotResult.area || null,
+      position: spotResult.position || null,
+    }
+  })
+
+  return res.status(200).json({
+    message: "success",
+    reservations: mapReservations
   })
 }

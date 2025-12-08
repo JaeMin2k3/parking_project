@@ -86,9 +86,9 @@ VALUES
 INSERT INTO `parking_project`.`reservations`
 (`dateIn`, `dateOut`, `startBlock`, `blockCount`, `status`, `channel`,
  `plate`, `vehicleType`, `isOverNight`, `createdAt`, `updatedAt`,
- `user_id`, `spotId`)
+ `userId`, `spotId`)
 VALUES
-('2025-12-05', '2025-12-05', 22, 2, 'CONFIRMED', 'ONLINE',
+('2025-12-05', '2025-12-05', 21, 3, 'CONFIRMED', 'ONLINE',
  '37A55555', 'CAR', 0, NOW(), NOW(), '0987287665', 198);
 
 
@@ -100,10 +100,14 @@ VALUES
      `reservationId`, `spotId`)
 VALUES
     ('2025-12-05', '37A55555', 'CAR',
-     22, NOW(), 'CONFIRMED',
+     21, NOW(), 'CONFIRMED',
      NOW(), NOW(),
      1, 198),
     ('2025-12-05', '37A55555', 'CAR',
+     22, NOW(), 'CONFIRMED',
+     NOW(), NOW(),
+     1, 198),
+     ('2025-12-05', '37A55555', 'CAR',
      23, NOW(), 'CONFIRMED',
      NOW(), NOW(),
      1, 198);

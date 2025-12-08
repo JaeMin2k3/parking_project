@@ -10,7 +10,8 @@ module.exports = async function recognizePlate(filePath) {
     const response = await fetch("https://api.platerecognizer.com/v1/plate-reader/", {
       method: "POST",
       headers: { Authorization: `Token ${process.env.API_RECOGNITION}` },
-      body: formData
+      body: formData,
+      signal: AbortSignal.timeout(30000) 
     });
 
     if(!response.ok) throw new Error(`appi error: ${response.status}`);

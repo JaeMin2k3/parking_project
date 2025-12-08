@@ -54,7 +54,10 @@ exports.postImageIn = async (req, res, next) => {
     const filePath = req.file.path; 
     // khởi tạo trc
     const plateTask = platerecognizer(filePath); 
-    const uploadTask = uploadAndCleanup(filePath); 
+    const uploadTask = uploadAndCleanup(filePath).catch(err => {
+    console.error("Lỗi upload ngầm (đã chặn crash):", err.message);
+    return null; 
+});
 
     let transaction; 
 
@@ -160,10 +163,9 @@ exports.postImageIn = async (req, res, next) => {
             position = reservation.position;
             ticketReservationId = reservation.id;
             bookedStart = reservation.startBlock;
-            // Tính bookedEnd dựa trên reservation
             bookedEnd = (reservation.startBlock + reservation.blockCount) % 24;
 
-            // Kiểm tra Spot có khả dụng không (Phòng trường hợp Spot bị hỏng sau khi khách đặt)
+            // Kiểm tra Spot có khả dụng không 
             const spot = await model.Spot.findOne({
                 where: { id: spotId, }, 
                 paranoid: true,
@@ -259,11 +261,11 @@ exports.postImageIn = async (req, res, next) => {
             }, { transaction });
 
             ticketReservationId = newReservation.id;
-            bookedEnd = null; // Khách vãng lai có thể không có giờ ra cố định
+            bookedEnd = null; // Khách vãng không có giờ ra cố định
         }
 
         
-        // Update trạng thái Spot thành "Đang có xe" (status = false)
+        // Update trạng thái Spot 
         await model.Spot.update(
             { status: false }, 
             { where: { id: spotId }, transaction }
@@ -453,11 +455,14 @@ exports.postImageOut = async(req,res,next) => {
       }
 
       // chạy song song 2 sql update
+      const dateOut = new Date().toLocaleDateString('sv-SE');
       await Promise.all([
-        await model.Ticket.update({finishTime: dateTime,status: 'inactive',},
+        model.Ticket.update({finishTime: dateTime,status: 'inactive',},
         {where: {id: ticket.id}, transaction}),
-        await model.Reservation.update({status: 'CHECKOUT'},
-        {where: {id: ticket.reservationId}, transaction})
+         model.Reservation.update({status: 'CHECKOUT', dateOut: dateOut},
+        {where: {id: ticket.reservationId}, transaction}),
+        model.ReservationBlock.update({status: 'CHECKOUT'},
+          {where: { reservationId: ticket.reservationId}})
       ])
 
       await transaction.commit();
