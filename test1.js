@@ -11,8 +11,8 @@
 //     console.log(dateString)
 
 
-  let dateTime = new Date().toLocaleString("sv-SE");
-    const date = dateTime.split(" ")[0];
-    const hour = dateTime.split(" ")[1];
-    const tineEven = hour.split(":")[0];
-    console.log(tineEven);
+  let dateTime = new Date().toLocaleDateString('sv-SE');
+  let dateTime1 = new Date().toLocaleTimeString("sv-SE");
+   
+    console.log(dateTime);
+    console.log(dateTime1);

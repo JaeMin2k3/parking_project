@@ -5,7 +5,8 @@ const sequelize = require('./config/database');
 const cors = require('cors');
 require('dotenv').config();             
 const { initCronJobs } = require('./cronJobs');
-
+const dns = require('node:dns');
+dns.setDefaultResultOrder('ipv4first');
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -13,7 +14,7 @@ app.use(bodyParser.urlencoded({ extended: false }));
 
 const port = process.env.PORT;
 
-// import model (nếu bạn cần dùng ở đây)
+// import model 
 const models = require('./models/index');
 
 // import router

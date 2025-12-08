@@ -17,12 +17,15 @@ router.get('/infor', isUser, controllerUser.getInfor);
 router.post('/send-barcode', controllerUser.postBarCode);
 router.post('/forget-password', controllerUser.postForgetPw);
 
-router.post('/parking-lot/available', controllerUser.postAvailableSlot)
+router.post('/parking-lot/available', isUser, controllerUser.postAvailableSlot)
 router.post('/reservation', isUser, controllerUser.postReservation);
 router.post('/payment/vnpay/create', isUser, controllerUser.postCreateVnpayPayment);
 router.get('/payment/vnpay/return', isUser, controllerUser.vnpayIpn)
 
 
 router.get('/parking/status', controllerUser.getAllSlotStatus);
+router.get('/reservations/active/numbers',isUser, controllerUser.getActiveReservationNumbers);
+router.get('/reservations',isUser, controllerUser.getReservations);
+
 
 module.exports = router;

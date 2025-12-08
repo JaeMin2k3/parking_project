@@ -907,7 +907,9 @@ exports.getAllTickets = async (req, res, next) => {
       TimeOut: ticket.finishTime,
       plate: ticket.plate,
       vehicleType: ticket.vehicleType,
-      colorCode: colorCode
+      colorCode: colorCode,
+      status: ticket.status
+
     }
   })
 
@@ -917,3 +919,70 @@ exports.getAllTickets = async (req, res, next) => {
   })
 
 }
+
+// xem toàn bộ reservation
+
+exports.getReservation = async(req, res, next) => {
+    const date = new Date().toLocaleDateString('sv-SE');
+    const time = new Date().toLocaleTimeString('sv-SE');
+    const hour = Number(time.split(':')[0]);
+
+    const [reservation1, reservation2] = await Promise.all([
+      model.Reservation.findAll({
+        where: {
+          dateIn : date, 
+          startTime: {[Op.gt]: hour },
+          status: 'CONFIRMED'
+        }
+      }),
+      model.Reservation.findAll({
+        where: {
+          dateOut: date,
+          [Op.and] : [sequelize.literal(`(startBlock+blockCount - 24) > ${hour} `)],
+          status: 'CONFIRMED'
+        }
+      })
+    ])
+    
+    const reservations = [...reservation1, ...reservation2];
+    if(reservations.length > 0) return res.status({
+      message: "success",
+      reservations: reservations
+    })
+    return res.status(200).json({
+      message: "success",
+      reservations: []
+    })
+
+}
+
+// xem realtime doanh thu của ngày hôm nây
+
+exports.getNowRevenue = async (req, res,  next) => {
+  const date = new Date().toLocaleDateString();
+  const revenue = await model.Reservation.findAll(
+    {where:{
+      dateIn: date,
+      status: {[Op.or]: ['CHECKOUT', 'NOSHOW']}
+      },
+    include: [
+      {
+        model: model.Ticket,
+        required: false,
+        include: [{
+          model: model.Bill,
+          required: false
+        }]
+      },
+    ],
+  })
+
+}
+
+// xem lịch sử của reservation hoàn thành và cancelled và phân trang, fillter, ngày tháng, biển số, trạng thái
+
+//biểu đồ doanh thu theo tháng
+
+// biểu đồ số lượt xe mỗi ngày trong tháng
+
+// biểu đồ tỉ lệ ô tô / xe máy trong bãi

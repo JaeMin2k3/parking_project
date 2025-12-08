@@ -17,13 +17,13 @@ Ticket.belongsTo(Staff, { foreignKey: 'staffUsername', targetKey: 'username', on
 
 // Customer — Reservation
 Customer.hasMany(Reservation, {
-  foreignKey: 'user_id',
+  foreignKey: 'userId',
   sourceKey: 'username',
   onDelete: 'SET NULL',
   onUpdate: 'CASCADE',
 });
 Reservation.belongsTo(Customer, {
-  foreignKey: 'user_id',
+  foreignKey: 'userId',
   targetKey: 'username',
 });
 
