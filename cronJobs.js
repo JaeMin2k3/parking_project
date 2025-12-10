@@ -43,9 +43,8 @@ async function cleanPendingReservations(t) {
 // Xử lý đơn đã đặt nhưng KHÔNG ĐẾN (CONFIRMED -> NO_SHOW)
 
 async function cleanNoShowReservations(t) {
-   const date = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' });
-   const hours = new Date().getHours(); 
-   const dateString = date.toString();
+     const date = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' });
+   
 
     // lấy toàn bộ reservation đã thanh toán thành công
     const noShowReservations = await model.Reservation.findAll({
@@ -54,8 +53,18 @@ async function cleanNoShowReservations(t) {
             status: 'CONFIRMED',
             channel: 'ONLINE'
         },
+        include: [
+            {
+                model: model.Payment,
+                attribute: ['costParking'],
+                where: {
+                    status: "SUCCEEDED"
+                }
+            }
+        ],
         transaction: t
     });
+    const bill = [];
     const overTimeReservation = [];
     const ids = noShowReservations.map(r => {
          const endTime = r.startBlock + r.blockCount
@@ -63,10 +72,30 @@ async function cleanNoShowReservations(t) {
             if(dateString > r.dateIn){
                 // qua ngày rồi
                 const endTime = endTime - 24;
-                if(endTime < hours) overTimeReservation.push(r.id);
+                if(endTime < hours) {
+                    overTimeReservation.push(r.id);
+                    bill.push({
+                        channel: 'ONLINE',
+                        payedMoney: r.Payment.costParking,
+                        startTime: date,
+                        finishTime: date,
+                        totalPrice: 0,
+                        ticketId: null,
+                    })
+                }
             }
         }else{
-            if(hours > endTime) overTimeReservation.push(r.id)
+            if(hours > endTime){
+                 overTimeReservation.push(r.id);
+                 bill.push({
+                        channel: 'ONLINE',
+                        payedMoney: r.costParking,
+                        startTime: date,
+                        finishTime: date,
+                        totalPrice: 0,
+                        ticketId: null,
+                    })
+            }
         }
     });
     if (overTimeReservation.length === 0) return 0;
@@ -76,10 +105,12 @@ async function cleanNoShowReservations(t) {
         model.Reservation.update({ status: 'NOSHOW' }, 
             { where: { id: overTimeReservation }, transaction: t }),
         model.ReservationBlock.update({ status: 'NOSHOW' }, 
-            { where: { reservationId: overTimeReservation }, transaction: t })
+            { where: { reservationId: overTimeReservation }, transaction: t }),
+        model.Bill.bulkCreate(bill, {transaction})
     ]);
 
     return overTimeReservation.length;
+
 }
 
 

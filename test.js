@@ -111,3 +111,6 @@ VALUES
      23, NOW(), 'CONFIRMED',
      NOW(), NOW(),
      1, 198);
+
+
+     INSERT INTO `parking_project`.`payments` (`id`, `costParking`, `currency`, `status`, `vnpTxnRef`, `createdAt`, `updatedAt`, `reservationId`) VALUES (1, 30000, 'VND', 'SUCCEEDED', 'ádfasfsdfsf', now(), now(), 1);
