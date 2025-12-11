@@ -22,16 +22,14 @@ router.post('/delete/:idSpot',isAdmin, controllerAdmin.postDeleteSpot)
 
 router.get('/auth/token',isAdmin, controllerAdmin.getRole);
 router.get('/slot-available',isAdmin,controllerAdmin.getSlotAvailable);
-router.get('/allTickets', controllerAdmin.getAllTickets)
-router.get('/nowReservation', controllerAdmin.getNowReservation)
-router.get('/nowRevenue', controllerAdmin.getNowRevenue);
-router.get('/MonthlyRevenue', controllerAdmin.getMonthlyRevenue);
-router.get('/vehicleRatio', controllerAdmin.getVehicleRatio);
-router.post('/newParkingRateType', controllerAdmin.postNewParkingRateType);
-router.get('/ParkingRate', controllerAdmin.getParkingRate);
-// Report & Charts Routes
-// router.get('/report/monthly-revenue', isAdmin, controllerAdmin.getMonthlyRevenue);
-// router.get('/report/monthly-vehicles', isAdmin, controllerAdmin.getMonthlyVehicles);
-// router.get('/report/vehicle-ratio', isAdmin, controllerAdmin.getVehicleRatio);
+router.get('/allTickets', isAdmin, controllerAdmin.getAllTickets)
+router.get('/nowReservation', isAdmin, controllerAdmin.getNowReservation)
+router.get('/nowRevenue', isAdmin, controllerAdmin.getNowRevenue);
+router.get('/MonthlyRevenue',isAdmin, controllerAdmin.getMonthlyRevenue);
+router.get('/vehicleRatio', isAdmin,controllerAdmin.getVehicleRatio);
+router.post('/newParkingRateType',isAdmin, controllerAdmin.postNewParkingRateType);
+router.get('/ParkingRate', isAdmin,controllerAdmin.getParkingRate);
+router.post('/traffic-flow', isAdmin,controllerAdmin.postTrafficFlow)
+
 
 module.exports = router;
