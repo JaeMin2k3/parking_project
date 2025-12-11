@@ -383,15 +383,17 @@ exports.postAvailableSlot = async (req, res, next) => {
       blockWhereCondition[Op.or] = orConditions;
   }
   const freeSpots = await model.Spot.findAll({
+    limit: 10,       
+    subQuery: false,
     attributes: ['id', 'area', 'position', 'status', 'vehicleType', 'slotType'],
     where: {
       status: true,
       isActive: true,
       vehicleType: vehicleType,
       slotType: 'ONLINE',
-      
       '$ReservationBlocks.id$': null // chỉ lấy spot không bận 
     },
+   
     paranoid: true, 
     include: [
       {
@@ -399,7 +401,7 @@ exports.postAvailableSlot = async (req, res, next) => {
         required: false,
         where: blockWhereCondition
       }
-    ]
+    ],
   });
 if(!freeSpots) return res.status(404).json({
   message: "no found",
