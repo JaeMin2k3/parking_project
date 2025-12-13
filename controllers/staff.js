@@ -14,7 +14,7 @@ exports.postLogin = async (req,res,next) => {
   const {username, password} = req.body;
   console.log(username, password)
   const staff = await model.Staff.findOne({
-    where: { username, role: "staff" },
+    where: { username },
     attribute: ["username", "password_hash", "role"],
     raw: true
   });

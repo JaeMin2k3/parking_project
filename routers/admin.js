@@ -2,7 +2,6 @@ const express = require('express');
 const router  = express.Router();
 const controllerAdmin = require('../controllers/admin')
 const isAdmin = require('../middleware/isAdmin')
-router.post('/login', controllerAdmin.postLogin);
 router.post('/newStaff', isAdmin, controllerAdmin.postNewStaff)
 router.get('/staffs', isAdmin, controllerAdmin.getAllStaffs);
 router.get('/staff/:id',isAdmin, controllerAdmin.getStaff);
@@ -19,6 +18,7 @@ router.get('/trash/deletedSpots', isAdmin,controllerAdmin.getDeletedSpots);
 router.post('/restore/:spotId', isAdmin,controllerAdmin.postRestoreSpot);
 router.post('/newSpots', isAdmin,controllerAdmin.postNewSpots);
 router.post('/delete/:idSpot',isAdmin, controllerAdmin.postDeleteSpot)
+router.post('/edit/:idSpot', isAdmin, controllerAdmin.postEditSpot)
 
 router.get('/auth/token',isAdmin, controllerAdmin.getRole);
 router.get('/slot-available',isAdmin,controllerAdmin.getSlotAvailable);

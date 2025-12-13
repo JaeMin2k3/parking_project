@@ -15,6 +15,6 @@ const upload = multer({storage: storge});
 
 Router.post('/login', controllerStaff.postLogin);
 Router.get('/infor', isStaff, controllerStaff.getInfor);
-Router.post('/ticket-entry',isStaff,isStaff,upload.single("image"), controllerStaff.postImageIn);
+Router.post('/ticket-entry',isStaff,upload.single("image"), controllerStaff.postImageIn);
 Router.post('/free-endtry',isStaff,upload.single("image"), controllerStaff.postImageOut);
 module.exports = Router
