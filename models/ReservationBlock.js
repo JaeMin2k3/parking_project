@@ -11,7 +11,7 @@ module.exports = (sequelize) => {
   status: {type: DataTypes.ENUM('CONFIRMED', 'CANCELLED', 'PENDING','NOSHOW', 'CHECKIN','CHECKOUT'), default: 'PENDING'}
 }, {
   tableName: 'reservationBlocks',
-
+  timestamps: false,
   indexes: [
     // 1 slot - 1 ngày - 1 giờ chỉ có 1 reservation
     { unique: true, fields: ['spotId', 'date', 'blockIndex'] },

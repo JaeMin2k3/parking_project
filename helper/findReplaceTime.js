@@ -1,6 +1,6 @@
 const { Op } = require('sequelize');
 const model = require('../models/index');
-
+const moment = require('moment-timezone')
 module.exports = async function findReplaceTime(reservation, transaction) {
    
     const startBlock = reservation.startBlock;
@@ -11,16 +11,17 @@ module.exports = async function findReplaceTime(reservation, transaction) {
     const blockWhereCondition = {
         status: { [Op.in]: ['CONFIRMED', 'PENDING', 'CHECKIN'] }
     };
-
+    const dateIn = moment(reservation.dateIn).tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
+    const dateOut = moment(reservation.dateOut).tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
     if (!isOverNight) {
         // TRƯỜNG HỢP 1: Trong ngày
-        blockWhereCondition.date = reservation.dateIn;
+        blockWhereCondition.date = dateIn;
         blockWhereCondition.blockIndex = { [Op.between]: [startBlock, startBlock + blockCount - 1] };
     } else {
         // TRƯỜNG HỢP 2: Qua đêm 
         const orConditions = [
             {
-                date: reservation.dateIn, // Sửa dateTimeIn -> reservation.dateIn
+                date: reservation.dateIn, 
                 blockIndex: { [Op.between]: [startBlock, 23] }
             }
         ];
@@ -28,7 +29,7 @@ module.exports = async function findReplaceTime(reservation, transaction) {
         // Chỉ check ngày hôm sau nếu giờ ra > 0
         if (endBlock > 0) {
             orConditions.push({
-                date: reservation.dateOut, // Sửa dateTimeOut -> reservation.dateOut
+                date: dateOut, 
                 blockIndex: { [Op.between]: [0, endBlock - 1] } 
             });
         }

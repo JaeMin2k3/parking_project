@@ -8,7 +8,8 @@ module.exports = (sequelize) => {
     status: { type: DataTypes.ENUM('SUCCEEDED','FAILED','PENDING'), defaultValue: 'PENDING' },
     vnpTxnRef: { type: DataTypes.STRING(50), allowNull: false, unique: true },
   }, {
-    tableName: 'payments'
+    tableName: 'payments',
+     timestamps: false,
   });
   return Payment;
 };

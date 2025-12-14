@@ -11,13 +11,14 @@
 //     console.log(dateString)
 
 
-
-const now = new Date();
-    const options = { timeZone: 'Asia/Ho_Chi_Minh' };
-    const isoFormat = 'sv-SE';
-    const date1 = now.toLocaleDateString(isoFormat, options); 
-    
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const date2 = tomorrow.toLocaleDateString(isoFormat, options);
-    console.log(date1 + date2)
+let dateTimeIn = "2025-12-13";
+let dateTimeOut = "2025-12-14";
+let timeIn = 13
+let timeOut = 15
+const moment = require("moment-timezone")
+const startTime = moment.tz(dateTimeIn, "YYYY-MM-DD", "Asia/Ho_Chi_Minh") .hour(timeIn).minute(0).second(0);
+  const endTime = moment.tz(dateTimeOut, "YYYY-MM-DD", "Asia/Ho_Chi_Minh").hour(timeOut).minute(0).second(0);
+  let diffMs = endTime - startTime;
+  const dateIn = new Date('2025-12-13 16:00:00')
+    // const dateOut = new Date(reservation.dateOut).getDate();
+    console.log(dateIn)

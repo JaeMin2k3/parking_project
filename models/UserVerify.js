@@ -8,12 +8,12 @@ module.exports = (sequelize) => {
     expiresAt: { type: DataTypes.DATE, allowNull: false },
     usedAt: { type: DataTypes.DATE, allowNull: true },
   }, {
-    tableName: 'user_verifies',
-    underscored: true,
+    tableName: 'UserVerifies',
+    timestamps: false,
     indexes: [
-      { fields: ['gmail_Customer'] },
-      { fields: ['expires_at'] },
-      { unique: true, fields: ['token_hash'] },
+      { fields: ['gmailCustomer'] },
+      { fields: ['expiresAt'] },
+      { unique: true, fields: ['tokenHash'] },
     ],
   });
   return UserVerify;

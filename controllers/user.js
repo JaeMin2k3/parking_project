@@ -9,11 +9,11 @@ const sequelize = require('../config/database');
 
 const isSlotAvailable = require('../helper/isSlotAvailable');
 const createBlocksFromReservation = require('../helper/createBlocksFromReservation');
-
+const moment = require('moment-timezone');
 const vnpay = require('../config/vnpay');
 const { VnpLocale, dateFormat, ProductCode } = require('vnpay'); 
 const createAndSendVerifyLink = require('../helper/createAndSendVerifyLink');
-
+const checkAvailableSpotInTwoDays = require('../helper/checkAvailableSpotInTwoDays');
 
 // user/login
 exports.postLogin = async (req, res, next) => {
@@ -333,27 +333,25 @@ exports.postAvailableSlot = async (req, res, next) => {
     return res.status(400).json({ message: "giờ phải nằm trong khoảng từ 0 đến 23" });
   }
   
-  const entryDate = new Date(dateTimeIn);
-  const exitDate = new Date(dateTimeOut);
-
-  entryDate.setHours(timeIn, 0, 0 ,0);
-  exitDate.setHours(timeOut, 0, 0, 0);
-
-  const now = new Date();
+  const startTime = moment.tz(dateTimeIn, "Asia/Ho_Chi_Minh") .hour(timeIn).minute(0).second(0);
+  const endTime = moment.tz(dateTimeOut, "Asia/Ho_Chi_Minh").hour(timeOut).minute(0).second(0);
+  console.log(startTime, endTime)
+  const now =  moment().tz("Asia/Ho_Chi_Minh");
+  console.log(now);
   const ONE_DAY = 24 * 60 * 60 * 1000;
   const ONE_Hour = 60 * 60 * 1000;
 
-  if(entryDate - now < ONE_Hour*48) {
+  if(startTime - now < ONE_Hour*48) {
     return res.status(400).json({message: "thời gian đặt chỗ với thời gian đăt phải cách nhau tối thiểu 48h"});
   }
 
-  const diffMs = exitDate - entryDate;
+  const diffMs = endTime - startTime;
    if(diffMs > ONE_DAY || diffMs < ONE_Hour){
     return res.status(400).json({message: "bạn không thể đặt chỗ quá 24h và phải chỗ ít nhất 1h"})
   }
 
   let isOverNight= false;
-  if (new Date(dateTimeIn).getDate() !== new Date(dateTimeOut).getDate()) {
+  if (dateTimeIn !== dateTimeOut) {
       isOverNight = true;
   }
   const blockWhereCondition = {
@@ -438,21 +436,18 @@ exports.postReservation = async (req, res, next) => {
     return res.status(400).json({ message: "giờ phải nằm trong khoảng từ 0 đến 23" });
   }
   
-  const entryDate = new Date(dateTimeIn);
-  const exitDate = new Date(dateTimeOut);
+  const startTime = moment.tz(dateTimeIn, "Asia/Ho_Chi_Minh") .hour(timeIn).minute(0).second(0);
+  const endTime = moment.tz(dateTimeOut, "Asia/Ho_Chi_Minh").hour(timeOut).minute(0).second(0);
 
-  entryDate.setHours(timeIn, 0, 0 ,0);
-  exitDate.setHours(timeOut, 0, 0, 0);
-
-  const now = new Date();
+  const now =  moment().tz("Asia/Ho_Chi_Minh");
   const ONE_DAY = 24 * 60 * 60 * 1000;
   const ONE_Hour = 60 * 60 * 1000;
 
-  if(entryDate - now < ONE_DAY*2) {
+  if(startTime - now < ONE_DAY*2) {
     return res.status(400).json({message: "thời gian đặt phải cách ngày đặt là 2 ngày"});
   }
 
-  const diffMs = exitDate - entryDate;
+  const diffMs = endTime - startTime;
    if(diffMs > ONE_DAY || diffMs < ONE_Hour){
     return res.status(400).json({message: "bạn không thể đặt chỗ quá 24h và phải chỗ ít nhất 1h"})
   }
@@ -478,8 +473,8 @@ exports.postReservation = async (req, res, next) => {
     }
     console.log(check);
     const reservation = await model.Reservation.create({
-      dateIn: dateTimeIn,
-      dateOut: dateTimeOut,
+      dateIn: startTime,
+      dateOut: endTime,
       startBlock: startBlock,
       blockCount: blockCount,
       status: 'PENDING',
@@ -498,11 +493,11 @@ exports.postReservation = async (req, res, next) => {
     await createBlocksFromReservation(reservation, dateTimeIn, dateTimeOut, transaction, plate, vehicleType);
     await transaction.commit();
     return res.status(200).json({ 
-      message: `Đặt chỗ thành công từ ${timeIn}:00 - ngày ${dateTimeIn} đến ${timeOut}:00 - ngày ${dateTimeOut}`,
+      message: `Đặt chỗ thành công từ ${startTime} - ${endTime}`,
       reservation: {
         id: reservation.id,
         date: reservation.date,
-        timeRange: `${timeIn}:00 - ${timeOut}:00`,
+        timeRange: `${startTime} - ${endTime}:00`,
         blockCount: reservation.blockCount,
         plate: reservation.plate,
         vehicleType: reservation.vehicleType,
@@ -706,6 +701,10 @@ const io = require('../socket');
 
 // /user/parking/status
 exports.getAllSlotStatus = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+  try {
+  let availableSpotsOnline;
+  // đếm slot hiện tại
   const [carNumbers, motorNumbers] = await Promise.all([
     model.Spot.count({
     where: {
@@ -722,22 +721,29 @@ exports.getAllSlotStatus = async (req, res, next) => {
       isActive: true,
       status: true
     }
-  })
+  }),
+  availableSpotsOnline = await checkAvailableSpotInTwoDays( transaction)
   ])
-  
+  await transaction.commit();
+  console.log(availableSpotsOnline)
   io.getIO().emit('slotStatus', {
     action: 'updateStatus',
     data: {
-      carNumbers: carNumbers,
-      motorNumbers: motorNumbers
+      carNumbers: carNumbers + availableSpotsOnline.carSlot,
+      motorNumbers: motorNumbers + availableSpotsOnline.motorSlot
     }
     
   })
+  
   return res.status(200).json({
     message: "success",
-    carNumbers: carNumbers,
-    motorNumbers: motorNumbers,
+    carNumbers: carNumbers + availableSpotsOnline.carSlot,
+    motorNumbers: motorNumbers + availableSpotsOnline.motorSlot
   })
+  } catch (error) {
+    console.log(error);
+    await transaction.rollback();
+  }
 }
 
 exports.getActiveReservationNumbers = async (req, res, next) => {
@@ -755,7 +761,7 @@ exports.getReservations =  async (req, res, next) =>{
   const reservations = await model.Reservation.findAll({
     where:{
       userId: idUser,
-      status: {[Op.in]: ['PENDING', 'CONFIRMED', 'CHECKIN'] }
+      status: {[Op.in]: ['PENDING', 'CONFIRMED', 'CHECKIN',"CHECKOUT"] }
     } 
   });
   if(!reservations) return res.status(200).json({
@@ -769,6 +775,7 @@ exports.getReservations =  async (req, res, next) =>{
     if(reservation.status === 'PENDING') color = '#F59E0B'
     else if(reservation.status === 'CONFIRMED') color = '#10B981'
     else if(reservation.status === 'CHECKIN') color = '#0EA5E9'
+    else if(reservation.status === 'CHECKOUNT') color = '#ca4126ff'
     const spotResult = await spot;
     return {
       id: reservation.id,

@@ -43,95 +43,62 @@ async function cleanPendingReservations(t) {
 // Xử lý đơn đã đặt nhưng KHÔNG ĐẾN (CONFIRMED -> NO_SHOW)
 
 async function cleanNoShowReservations(t) {
-    const now = new Date()
-     const date = now.toLocaleString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).split(" ")[0];
-    // console.log(date);
-    const hours = now.getHours() + (now.getMinutes() / 60);
-    // console.log(hours);
-    // lấy toàn bộ reservation đã thanh toán thành công
-    const noShowReservations = await model.Reservation.findAll({
+    const now = new Date();
+    
+    const overTimeReservations = await model.Reservation.findAll({
         attributes: ['id', 'isOverNight', 'startBlock', 'blockCount', 'dateIn', 'dateOut'],
         where: {
             status: 'CONFIRMED',
-            channel: 'ONLINE'
+            channel: 'ONLINE',
+            dateOut: { [Op.lt]: now } 
         },
         include: [
             {
                 model: model.Payment,
-                attribute: ['costParking'],
+                attributes: ['costParking'], 
                 where: {
                     status: "SUCCEEDED"
                 },
             }
         ],
+        raw: true, 
         transaction: t
     });
-    const bill = [];
-    const overTimeReservation = [];
-    const map = noShowReservations.map(r => {
-         let endTime = r.startBlock + r.blockCount
-         let payedMoney = (r.Payments && r.Payments.length > 0) ? r.Payments[0].costParking : 0;
-        if(date > r.dateOut){
-            console.log("quá ngày quá nhiều rồi")
-            overTimeReservation.push(r.id);
-                    bill.push({
-                        channel: 'ONLINE',
-                        payedMoney: payedMoney,
-                        startTime: date,
-                        finishTime: date,
-                        totalPrice: 0,
-                        ticketId: null,
-                    })
-        }
-        else{ 
-            if(r.isOverNight){
-            console.log(r.Payments);
-            if(date > r.dateIn){
-                console.log("qua ngày rồi")
-                // qua ngày rồi
-                 endTime = endTime - 24;
-                if(endTime < hours) {
-                    
-                    overTimeReservation.push(r.id);
-                    bill.push({
-                        channel: 'ONLINE',
-                        payedMoney: payedMoney,
-                        startTime: date,
-                        finishTime: date,
-                        totalPrice: 0,
-                        ticketId: null,
-                    })
-                }
-            }
-            }else{
-                if(hours > endTime){
-                    overTimeReservation.push(r.id);
-                    bill.push({
-                            channel: 'ONLINE',
-                            payedMoney: payedMoney,
-                            startTime: date,
-                            finishTime: date,
-                            totalPrice: 0,
-                            ticketId: null,
-                        })
-                }
-            }
-        }
-    });
-    // console.log("các id not show" + overTimeReservation)
-    if (overTimeReservation.length === 0) return 0;
 
-    // Update trạng thái reservation quá thời gian đỗ mà khách không đến checkin và update thêm reservationblock
+    if (overTimeReservations.length === 0) return 0;
+
+    // Chuẩn bị dữ liệu
+    const reservations = [];
+    const bills = [];
+
+    overTimeReservations.forEach(reservation => {
+        reservations.push(reservation.id);
+        const cost = reservation['Payment.costParking'] || 0; 
+
+        bills.push({
+            channel: 'ONLINE',
+            payedMoney: cost,
+            startTime: reservation.dateIn,
+            finishTime: reservation.dateOut,
+            totalPrice: 0, // Hoặc bằng 'cost' nếu bạn muốn ghi nhận doanh thu này
+            urlCloudinaryCheckIn: null,
+            urlCloudinaryCheckOut: null,
+            ticketId: null,
+        });
+    });
+
+    // Thực hiện Update và Insert song song
     await Promise.all([
         model.Reservation.update({ status: 'NOSHOW' }, 
-            { where: { id: overTimeReservation }, transaction: t }),
+            { where: { id: reservations }, transaction: t }),
+            
         model.ReservationBlock.update({ status: 'NOSHOW' }, 
-            { where: { reservationId: overTimeReservation }, transaction: t }),
-        model.Bill.bulkCreate(bill, {transaction: t})
+            { where: { reservationId: reservations }, transaction: t }),
+            
+        model.Bill.bulkCreate(bills, { transaction: t })
     ]);
 
-    return overTimeReservation.length;
-
+    return overTimeReservations.length;
 }
 
 

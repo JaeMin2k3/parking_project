@@ -16,6 +16,7 @@ module.exports = (sequelize) => {
     urlCloudinaryCheckIn: {type: DataTypes.STRING(100), allowNull: true},
   }, {
     tableName: 'tickets',
+    timestamps: false,
     index: [
       {fields: ['plate', 'vehicleType', 'status']},
       // Giúp query tìm xe đang "active" cực nhanh

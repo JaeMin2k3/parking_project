@@ -3,8 +3,8 @@ const { DataTypes } = require('sequelize');
 module.exports = (sequelize) => {
   const Reservation = sequelize.define('Reservation', {
     id: { type: DataTypes.BIGINT.UNSIGNED, autoIncrement: true, primaryKey: true },
-    dateIn: {type: DataTypes.DATEONLY, allowNull: false},
-    dateOut: {type: DataTypes.DATEONLY, allowNull: true},
+    dateIn: {type: DataTypes.DATE, allowNull: false},
+    dateOut: {type: DataTypes.DATE, allowNull: true},
     startBlock: {type: DataTypes.INTEGER.UNSIGNED, allowNull: true},
     blockCount: {type: DataTypes.INTEGER.UNSIGNED, allowNull: true}, 
     status: {
@@ -19,6 +19,7 @@ module.exports = (sequelize) => {
   }
   , {
   tableName: 'reservations',
+  timestamps: false,
   index: [
     {unique: true, fields: ['dateIn', 'startBlock', 'plate', 'vehicleType']},
     // Thứ tự ưu tiên: plate (định danh duy nhất) -> status -> date
