@@ -9,6 +9,7 @@ module.exports = (sequelize) =>{
     useAt: {type: DataTypes.DATE, allowNull: true}
   },{
     tableName: 'UserReset',
+     timestamps: false,
   })
 
   return UserReset;

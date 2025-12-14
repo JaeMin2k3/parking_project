@@ -9,7 +9,8 @@ module.exports = (sequelize) => {
     verified: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     status: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true }
     },{
-    tableName: 'customer'
+    tableName: 'customer',
+    timestamps: false,
   })
   return Customer
 }

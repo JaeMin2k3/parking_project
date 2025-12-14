@@ -3,11 +3,12 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const platerecognizer = require('../helper/plateRecognizer');
-const checkTime = require('../helper/checkTime')
+
 const sequelize = require('../config/database');
 const uploadAndCleanup = require('../helper/uploadAndCleanup');
-const checkAvailableTime = require('../helper/checkAvailableTime')
+const checkAvailableSpotInTwoDays = require('../helper/checkAvailableSpotInTwoDays')
 const {Op} = require('sequelize');
+const moment = require("moment-timezone")
 const findReplaceTime = require('../helper/findReplaceTime')
 // staff/login
 exports.postLogin = async (req,res,next) => {
@@ -55,21 +56,15 @@ exports.postImageIn = async (req, res, next) => {
     // khởi tạo trc
     const plateTask = platerecognizer(filePath); 
     const uploadTask = uploadAndCleanup(filePath).catch(err => {
-    console.error("Lỗi upload ngầm (đã chặn crash):", err.message);
-    return null; 
-});
+            console.error("Lỗi upload ngầm (đã chặn crash):", err.message);
+            return null; 
+        });
 
     let transaction; 
 
     try {
         //  lấy thời gian hiện tại
-        const now = new Date();
-        const dateTime = now.toLocaleString("sv-SE"); 
-        const date = dateTime.split(" ")[0];
-        const hour = now.getHours();
-        const minute = now.getMinutes();
-        const currentHour = hour + minute / 60;
-        console.log(currentHour) 
+         const now =  moment().tz("Asia/Ho_Chi_Minh").format('YYYY-MM-DD HH:mm:ss');
 
         // Đợi kết quả nhận diện biển số 
         const data = await plateTask;
@@ -111,69 +106,89 @@ exports.postImageIn = async (req, res, next) => {
 
         console.log(plate);
         console.log(vehicleType);
+        // đẩy ảnh lên cloud
+        
+
         // 2.2 Tìm Reservation hợp lệ
-        const reservation = await model.Reservation.findOne({
+        const reservations = await model.Reservation.findAll({
             where: {
                 plate: plate,
                 status: "CONFIRMED",
                 vehicleType: vehicleType,
                 channel: 'ONLINE',
-                [Op.or]: [
-                    // Vé trong ngày
-                    {
-                        dateIn: date,
-                        [Op.and]: [
-                            sequelize.literal(`(startBlock + blockCount - 1/6) > ${currentHour}`),
-                            sequelize.literal(`startBlock <= ${currentHour}`) 
-                        ]
-                    },
-                    // Vé qua đêm (check ngày ra)
-                    {
-                        dateOut: date,
-                        [Op.and]: [
-                          sequelize.literal(`(startBlock + blockCount) > (${currentHour} + 24 + 1/6)`)
-                        ]
-                    }
-                ]
+                dateOut: {
+                  [Op.gt]: now
+                }
+                
             },
+            raw: true,
+           order: [['dateIn', 'ASC']],
+            limit: 3,
             transaction
         });
-        console.log(reservation);
-
+        console.log(reservations)
         let spotId = null;
         let area = null;
         let position = null;
         let ticketReservationId = null;
-        let bookedStart = hour; 
+        let bookedStart = null; 
         let bookedEnd = null; 
-
+        let reservation = null;
+        let offTransfer = true;
         //  CÓ ĐẶT TRƯỚC (ONLINE) 
-        if (reservation) {
-            // Check logic thời gian chi tiết 
-            const isValidTime = await checkTime(reservation);
-            if (!isValidTime) {
-                await transaction.rollback();
-                return res.status(404).json({
-                    message: `Chưa đến giờ vào hoặc đã quá hạn. Thời gian đặt: ${reservation.startBlock}h`
-                });
+        if (reservations.length > 0){offTransfer = false}
+        console.log(reservations.length)
+          
+          
+        if(!offTransfer){
+            console.log("có reservation");
+            const nowObj = moment(now); 
+            for(let i = 0 ; i < reservations.length ; i ++){
+            const dateInObj = moment(reservations[i].dateIn);
+            const dateOutMoment = moment(reservations[i].dateOut);
+            const diffMinutes = dateInObj.diff(nowObj, 'minutes');
+            const minutesLeft = dateOutMoment.diff(nowObj, 'minutes');
+            if(minutesLeft < 10 && i === reservations.length -1){
+              // chuyển sang trực tiếp, vì quá hạn đã có corn check rồi, không thể có quá 3 reservation được => chuyển sang luồng trực tiếp
+              offTransfer = true;
+            }else if (minutesLeft < 10 && i < reservations.length - 1) continue;
+            else if( minutesLeft > 10 && diffMinutes < 5) {reservation = reservations[i]; break;}
+            else if( minutesLeft > 10 && diffMinutes > 5) {
+              await transaction.rollback();
+                    return res.status(400).json({ 
+                        message: `Bạn đến sớm ${diffMinutes} phút. Giờ đặt chỗ của bạn là: ${dateInObj.format('HH:mm')}` 
+                    });
             }
+
+        }
+           
+          // nếu không chuyển sang offline
+          if(!offTransfer){
 
             spotId = reservation.spotId;
             area = reservation.area;
             position = reservation.position;
             ticketReservationId = reservation.id;
             bookedStart = reservation.startBlock;
-            bookedEnd = (reservation.startBlock + reservation.blockCount) % 24;
+            if(reservation.isOverNight){
+              bookedEnd = (reservation.startBlock + reservation.blockCount) % 24
+            }else bookedEnd = reservation.startBlock + reservation.blockCount;            
 
             // Kiểm tra Spot có khả dụng không 
             const spot = await model.Spot.findOne({
-                where: { id: spotId, }, 
+                where: { 
+                  id: spotId,
+                  status: true,
+                  isActive: true 
+                }, 
+                lock: transaction.LOCK.UPDATE,
                 paranoid: true,
                 transaction
             });
 
             // Nếu Spot lỗi/bảo trì -> Tìm Spot thay thế
-            if (!spot || spot.isActive === false || spot.status === false) {
+            if (!spot ) {
+                // tìm slot online thay thế
                 let newSpot = await findReplaceTime(reservation, transaction);
                 
                 // Nếu không tìm được slot thay thế đúng chuẩn -> Tìm đại 1 slot Offline trống
@@ -216,10 +231,17 @@ exports.postImageIn = async (req, res, next) => {
                 ])
             }
 
+          }
+           
+
+            
+            
+            
 
         } 
         // KHÁCH VÃNG LAI (OFFLINE)
-        else {
+        if(offTransfer) {
+          console.log("ghe offline")
             // 1. Tìm ghế OFFLINE trước
             const spotOffline = await model.Spot.findOne({
                 where: {
@@ -228,6 +250,7 @@ exports.postImageIn = async (req, res, next) => {
                     vehicleType: vehicleType,
                     slotType: "OFFLINE",
                 }, 
+                lock: transaction.LOCK.UPDATE,
                 paranoid: true, 
                 transaction
             });
@@ -238,7 +261,7 @@ exports.postImageIn = async (req, res, next) => {
                 position = spotOffline.position;
             } else {
                 // 2. Nếu hết ghế Offline -> Check ghế Online còn trống
-                const availableSpots = await checkAvailableTime(vehicleType, transaction);
+                const availableSpots = await checkAvailableSpotInTwoDays(vehicleType, transaction);
                 
                 if (availableSpots.length === 0) {
                     await transaction.rollback();
@@ -252,7 +275,7 @@ exports.postImageIn = async (req, res, next) => {
 
             // Tạo Reservation ảo cho khách vãng lai
             const newReservation = await model.Reservation.create({
-                dateIn: date,
+                dateIn: now,
                 status: "CHECKIN",
                 channel: 'OFFLINE',
                 plate: plate,
@@ -261,7 +284,6 @@ exports.postImageIn = async (req, res, next) => {
             }, { transaction });
 
             ticketReservationId = newReservation.id;
-            bookedEnd = null; // Khách vãng không có giờ ra cố định
         }
 
         
@@ -273,13 +295,13 @@ exports.postImageIn = async (req, res, next) => {
 
         // Tạo Ticket 
         const ticket = await model.Ticket.create({
-            date: date,
+            date: new Date(),
             reservationId: ticketReservationId,
             spotId: spotId,
             vehicleType: vehicleType,
             bookedStart: bookedStart,
             bookedEnd: bookedEnd,
-            startTime: dateTime,
+            startTime: new Date(),
             status: 'active',
             plate: plate,
             staffUsername: req.username
@@ -297,30 +319,21 @@ exports.postImageIn = async (req, res, next) => {
             type: vehicleType,
             ticketId: ticket.id 
         });
-
-        // UPLOAD ẢNH & UPDATE DB
         try {
-            // Bây giờ mới await kết quả upload
-            const uploadResult = await uploadTask;
-            
-            if (uploadResult && uploadResult.secure_url) {
-                // Update link ảnh vào ticket
-                await model.Ticket.update(
-                    { urlCloudinaryCheckIn: uploadResult.secure_url },
-                    { where: { id: ticket.id } }
-                );
-                console.log(` Đã cập nhật ảnh check-in cho xe ${plate}`);
+          const uploadResult = await uploadTask;
+          await model.Ticket.update({ urlCloudinaryCheckIn: uploadResult.secure_url,},{
+            where: {
+              id: ticket.id
             }
-        } catch (err) {
-            console.log(err)
+          })
+        } catch (error) {
+          
         }
+        
 
     } catch (err) {
         console.error( err);
-        // Chỉ rollback nếu transaction chưa commit/rollback
-        if (transaction && !transaction.finished) {
-            await transaction.rollback();
-        }
+        await transaction.rollback();
         next(err);
     }
 };
@@ -332,7 +345,7 @@ exports.postImageOut = async(req,res,next) => {
   // tạo 1 phiên giao 
   const transaction = await sequelize.transaction();
   try {
-    let dateTime = new Date().toLocaleString("sv-SE");
+    const dateTime =  moment().tz("Asia/Ho_Chi_Minh").format('YYYY-MM-DD HH:mm:ss');
     
     
     // lấy dữ liệu
@@ -373,8 +386,9 @@ exports.postImageOut = async(req,res,next) => {
       vehicleType: vehicleType,
       status: 'active'
     }, transaction});
-    // lấy reservation
-    const reservation = model.Reservation.findOne({where: {id: ticket.reservationId}});
+    console.log(ticket)
+    // khởi tạo lấy reservation trước
+    const reservation =  model.Reservation.findOne({where: {id: ticket.reservationId}});
     
     // tìm kiếm payment khi đặt online
     const payment = await model.Payment.findOne({
@@ -438,7 +452,7 @@ exports.postImageOut = async(req,res,next) => {
 
       // tạo hoá đơn
       const bill = await model.Bill.create({
-        channel: spot.slotType,
+        channel: reservation1.channel,
         payedMoney: payedMoney,
         startTime: start,
         finishTime: end,
@@ -454,12 +468,11 @@ exports.postImageOut = async(req,res,next) => {
         return res.status(500).json({message: "lỗi server không thể tạo bill"})      
       }
 
-      // chạy song song 2 sql update
-      const dateOut = new Date().toLocaleDateString('sv-SE');
+      // chạy song song 2 sql updateS
       await Promise.all([
-        model.Ticket.update({finishTime: dateTime,status: 'inactive',},
+        model.Ticket.update({finishTime: new Date() ,status: 'inactive',},
         {where: {id: ticket.id}, transaction}),
-         model.Reservation.update({status: 'CHECKOUT', dateOut: dateOut},
+         model.Reservation.update({status: 'CHECKOUT'},
         {where: {id: ticket.reservationId}, transaction}),
         model.ReservationBlock.update({status: 'CHECKOUT'},
           {where: { reservationId: ticket.reservationId}})
@@ -469,8 +482,8 @@ exports.postImageOut = async(req,res,next) => {
 
       // phải chuyển về gmt+7 vì khi res.status(200).json nó tự động trả về gmt 0
       const billResponse = bill.toJSON();
-      billResponse.startTime = new Date(bill.startTime).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
-      billResponse.finishTime = new Date(bill.finishTime).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+      billResponse.startTime = moment(bill.startTime).tz("Asia/Ho_Chi_Minh").format("YYYY-MM-DD HH:mm:ss");
+      billResponse.finishTime = moment(bill.finishTime).tz("Asia/Ho_Chi_Minh").format("YYYY-MM-DD HH:mm:ss");
        return res.status(200).json({
         message: "success",
         bill: billResponse, 

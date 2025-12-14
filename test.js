@@ -65,7 +65,7 @@ VALUES
 ('staff10', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'Nhân viên 10', '2025-11-14', 'staff', 1, NOW(), NOW()),
 ('admin', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'Quản trị viên', '2025-11-14', 'admin', 1, NOW(), NOW());
 
-INSERT INTO `parking_project`.`customer` (`username`, `password_hash`, `gmail`, `role`, `verified`, `status`, `createdAt`, `updatedAt`) VALUES ('0987287665', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'minhsiu9999@gmail.com', 'customer', 0, 1, now(), now());
+INSERT INTO `parking_project`.`customer` (`username`, `password_hash`, `gmail`, `role`, `verified`, `status`) VALUES ('0987287665', '$2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi', 'minhsiu9999@gmail.com', 'customer', 0, 1);
 INSERT INTO parkingrate 
 (vehicleType, currency, unitPrice, ticketType, block, status, gracePeriod, createdAt, updatedAt) 
 VALUES 
@@ -85,32 +85,28 @@ VALUES
 
 INSERT INTO `parking_project`.`reservations`
 (`dateIn`, `dateOut`, `startBlock`, `blockCount`, `status`, `channel`,
- `plate`, `vehicleType`, `isOverNight`, `createdAt`, `updatedAt`,
+ `plate`, `vehicleType`, `isOverNight`,
  `userId`, `spotId`)
 VALUES
 ('2025-12-05', '2025-12-05', 21, 3, 'CONFIRMED', 'ONLINE',
- '37A55555', 'CAR', 0, NOW(), NOW(), '0987287665', 198);
+ '37A55555', 'CAR', 0,  '0987287665', 198);
 
 
 
  INSERT INTO parking_project.reservationblocks
     (`date`, `plate`, `vehicleType`,
      `blockIndex`, `expireTime`, `status`,
-     `createdAt`, `updatedAt`,
      `reservationId`, `spotId`)
 VALUES
     ('2025-12-05', '37A55555', 'CAR',
      21, NOW(), 'CONFIRMED',
-     NOW(), NOW(),
      1, 198),
     ('2025-12-05', '37A55555', 'CAR',
      22, NOW(), 'CONFIRMED',
-     NOW(), NOW(),
      1, 198),
      ('2025-12-05', '37A55555', 'CAR',
      23, NOW(), 'CONFIRMED',
-     NOW(), NOW(),
      1, 198);
 
 
-     INSERT INTO `parking_project`.`payments` (`id`, `costParking`, `currency`, `status`, `vnpTxnRef`, `createdAt`, `updatedAt`, `reservationId`) VALUES (1, 30000, 'VND', 'SUCCEEDED', 'ádfasfsdfsf', now(), now(), 1);
+     INSERT INTO `parking_project`.`payments` (`id`, `costParking`, `currency`, `status`, `vnpTxnRef`, `reservationId`) VALUES (1, 30000, 'VND', 'SUCCEEDED', 'ádfasfsdfsf', 1);

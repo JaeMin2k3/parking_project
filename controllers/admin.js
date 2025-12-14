@@ -543,9 +543,7 @@ res.status(200).json({
 exports.getAllTickets = async (req, res, next) => {
   const tickets = await model.Ticket.findAll({
     attributes: ['id', 'spotId', 'startTime', 'finishTime', 'plate', 'vehicleType', 'status'],
-    order: [
-    ['createdAt', 'DESC'] 
-  ]
+   
   })
   if(!tickets) return res.status(200).json({
     meseage: "success", 

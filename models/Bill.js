@@ -11,7 +11,8 @@ module.exports = (sequelize) => {
     urlCloudinaryCheckIn: {type: DataTypes.STRING(100), allowNull: true},
     urlCloudinaryCheckOut: {type: DataTypes.STRING(100), allowNull: true}
   },{
-    tableName: 'bill'
+    tableName: 'bill',
+     timestamps: false,
   })
   return Bill;
 }
