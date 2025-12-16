@@ -4,52 +4,35 @@ const admin = "123456";
 console.log(bcrypt.hashSync(admin,10));
 tk: admin, mk: $2b$10$8YwWb5C62So8KTPfaj.9MOg3Cdd0oaFja9jEs/GMMxCHfR0iaNxgi
 
-INSERT INTO spots (area, position, isActive, vehicleType, slotType, createdAt, updatedAt)
-WITH RECURSIVE NumberSeries AS (
-    -- 1. Điểm neo: Bắt đầu chuỗi số từ 1
-    SELECT 1 AS n
-    UNION ALL
-    -- 2. Phần đệ quy: Cộng 1 cho đến khi n < 100 (sẽ dừng ở 100)
-    SELECT n + 1
-    FROM NumberSeries
-    WHERE n < 100
-)
--- 3. Chèn dữ liệu từ chuỗi số đã tạo
-SELECT
-    'B',        -- GIẢ ĐỊNH: area. Bạn có thể thay đổi.
-    n,          -- position (1, 2, 3, ..., 100)
-    1,          -- GIẢ ĐỊNH: isActive = 1 (true).
-    'MOTORBIKE',      -- GIẢ ĐỊNH: vehicleType. Đổi thành 'MOTORBIKE' nếu cần.
-    CASE
-        WHEN n <= 70 THEN 'OFFLINE' -- 70 hàng đầu tiên
-        ELSE 'ONLINE'               -- 30 hàng còn lại
-    END AS slotType,
-    NOW(),      -- createdAt
-    NOW()       -- updatedAt
-FROM NumberSeries;
+
 
 INSERT INTO spots (area, position, isActive, vehicleType, slotType, createdAt, updatedAt)
 WITH RECURSIVE NumberSeries AS (
-    -- 1. Điểm neo: Bắt đầu chuỗi số từ 1
+    -- Tạo chuỗi số từ 1 đến 100
     SELECT 1 AS n
     UNION ALL
-    -- 2. Phần đệ quy: Cộng 1 cho đến khi n < 100 (sẽ dừng ở 100)
-    SELECT n + 1
-    FROM NumberSeries
-    WHERE n < 100
+    SELECT n + 1 FROM NumberSeries WHERE n < 100
 )
--- 3. Chèn dữ liệu từ chuỗi số đã tạo
-SELECT
-    'A',        -- GIẢ ĐỊNH: area. Bạn có thể thay đổi.
-    n,          -- position (1, 2, 3, ..., 100)
-    1,          -- GIẢ ĐỊNH: isActive = 1 (true).
-    'CAR',      -- GIẢ ĐỊNH: vehicleType. Đổi thành 'MOTORBIKE' nếu cần.
-    CASE
-        WHEN n <= 70 THEN 'OFFLINE' -- 70 hàng đầu tiên
-        ELSE 'ONLINE'               -- 30 hàng còn lại
-    END AS slotType,
-    NOW(),      -- createdAt
-    NOW()       -- updatedAt
+-- Phần 1: Tạo dữ liệu cho CAR (Khu A)
+SELECT 
+    'A' AS area,
+    n AS position,
+    1 AS isActive,
+    'CAR' AS vehicleType,
+    CASE WHEN n <= 70 THEN 'OFFLINE' ELSE 'ONLINE' END AS slotType,
+    NOW(),
+    NOW()
+FROM NumberSeries
+UNION ALL
+-- Phần 2: Tạo dữ liệu cho MOTORBIKE (Khu B)
+SELECT 
+    'B' AS area,
+    n AS position, -- Vẫn chạy từ 1 đến 100 cho khu B
+    1 AS isActive,
+    'MOTORBIKE' AS vehicleType,
+    CASE WHEN n <= 70 THEN 'OFFLINE' ELSE 'ONLINE' END AS slotType,
+    NOW(),
+    NOW()
 FROM NumberSeries;
 
 INSERT INTO staff (username, password_hash, name, date, role, status, createdAt, updatedAt)
