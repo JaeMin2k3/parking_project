@@ -21,4 +21,5 @@ const startTime = moment.tz(dateTimeIn, "YYYY-MM-DD", "Asia/Ho_Chi_Minh") .hour(
   let diffMs = endTime - startTime;
   const dateIn = new Date('2025-12-13 16:00:00')
     // const dateOut = new Date(reservation.dateOut).getDate();
-    console.log(dateIn)
+      const tomorrow = moment().tz("Asia/Ho_Chi_Minh").add(1, 'days').format("YYYY-MM-DD");
+    console.log(tomorrow)

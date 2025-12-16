@@ -6,48 +6,10 @@ require('dotenv').config();
 const { Op } = require('sequelize');
 const createNewSpots = require('../helper/createNewSpots')
 const io = require('../socket');
-const { raw } = require('body-parser');
+
 const ParkingRate = require('../models/ParkingRate');
 
 
-// admin/login
-exports.postLogin = async(req, res, next) => {
-  const {username, password} = req.body;  
-  const admin = await model.Staff.findOne({
-    where: {username, role: "admin"},
-    attributes: ["username", "password_hash", "role"],
-    raw: true
-  })
-
-  if(admin){ 
-    // console.log(admin);
-    const oke =  await bcrypt.compare(password, admin.password_hash);
-    if(oke){
-      jwt.sign({id: admin.username, role: admin.role}, process.env.SECRET_KEY, {expiresIn: "24h"},
-        (err, token) => {
-          if(err){
-            console.log(err);
-            res.status(500).send(err);
-          }else{
-            res.status(200).json({
-              message: "success",
-              token: token,
-              role: admin.role
-            })
-          }
-        }
-      );
-    }else {
-      res.status(401).json({
-        message: "fail pw"
-      })
-    }
-  } else res.status(401).json(
-    {
-      message: "Thông tin đăng nhập không hợp lệ"
-    }
-  )
-}
 
 //============================================================================= STAFF=======================================================================
 

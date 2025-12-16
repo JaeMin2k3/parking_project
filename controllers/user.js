@@ -13,8 +13,8 @@ const moment = require('moment-timezone');
 const vnpay = require('../config/vnpay');
 const { VnpLocale, dateFormat, ProductCode } = require('vnpay'); 
 const createAndSendVerifyLink = require('../helper/createAndSendVerifyLink');
-const checkAvailableSpotInTwoDays = require('../helper/checkAvailableSpotInTwoDays');
 
+const findAvailableSpotOnline = require('../helper/findAvailableSpotOnline');
 // user/login
 exports.postLogin = async (req, res, next) => {
   const {username, password} = req.body;
@@ -107,7 +107,7 @@ exports.postSign = async (req, res) => {
       transaction.afterCommit(async () => {
         await mailer.sendMail({
           to: email,
-          from: process.env.MAIL_FROM || process.env.GMAIL_USER,
+          from: process.env.GMAIL_USER,
           subject: 'Xác minh email',
           html: `
             <p>Chào ${user.username},</p>
@@ -703,9 +703,8 @@ const io = require('../socket');
 exports.getAllSlotStatus = async (req, res, next) => {
   const transaction = await sequelize.transaction();
   try {
-  let availableSpotsOnline;
   // đếm slot hiện tại
-  const [carNumbers, motorNumbers] = await Promise.all([
+  const [carNumbers, motorNumbers, onlineCarSlots, onlineMotorSlots] = await Promise.all([
     model.Spot.count({
     where: {
       vehicleType: 'CAR',
@@ -721,24 +720,25 @@ exports.getAllSlotStatus = async (req, res, next) => {
       isActive: true,
       status: true
     }
-  }),
-  availableSpotsOnline = await checkAvailableSpotInTwoDays( transaction)
+  }), 
+     findAvailableSpotOnline('CAR', 'ONLINE', transaction),
+     findAvailableSpotOnline('MOTORBIKE', 'ONLINE', transaction),
   ])
+  
   await transaction.commit();
-  console.log(availableSpotsOnline)
   io.getIO().emit('slotStatus', {
     action: 'updateStatus',
     data: {
-      carNumbers: carNumbers + availableSpotsOnline.carSlot,
-      motorNumbers: motorNumbers + availableSpotsOnline.motorSlot
+      carNumbers: carNumbers + onlineCarSlots.length,
+      motorNumbers: motorNumbers + onlineMotorSlots.length
     }
     
   })
   
   return res.status(200).json({
     message: "success",
-    carNumbers: carNumbers + availableSpotsOnline.carSlot,
-    motorNumbers: motorNumbers + availableSpotsOnline.motorSlot
+     carNumbers: carNumbers + onlineCarSlots.length,
+      motorNumbers: motorNumbers + onlineMotorSlots.length
   })
   } catch (error) {
     console.log(error);
