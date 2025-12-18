@@ -22,9 +22,9 @@ router.post('/edit/:idSpot', isAdmin, controllerAdmin.postEditSpot)
 
 router.get('/auth/token',isAdmin, controllerAdmin.getRole);
 router.get('/slot-available',isAdmin,controllerAdmin.getSlotAvailable);
-router.get('/allTickets', isAdmin, controllerAdmin.getAllTickets)
-router.get('/nowReservation', isAdmin, controllerAdmin.getNowReservation)
-router.get('/nowRevenue', isAdmin, controllerAdmin.getNowRevenue);
+router.post('/allTickets', isAdmin, controllerAdmin.postAllTickets)
+router.post('/nowReservation', isAdmin, controllerAdmin.postReservation)
+router.post('/nowRevenue', isAdmin, controllerAdmin.getNowRevenue);
 router.get('/MonthlyRevenue',isAdmin, controllerAdmin.getMonthlyRevenue);
 router.get('/vehicleRatio', isAdmin,controllerAdmin.getVehicleRatio);
 router.post('/newParkingRateType',isAdmin, controllerAdmin.postNewParkingRateType);
