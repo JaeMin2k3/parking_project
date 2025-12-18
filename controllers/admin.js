@@ -7,8 +7,7 @@ const { Op } = require('sequelize');
 const createNewSpots = require('../helper/createNewSpots')
 const io = require('../socket');
 
-const ParkingRate = require('../models/ParkingRate');
-
+const moment = require('moment-timezone')
 
 
 //============================================================================= STAFF=======================================================================
@@ -502,10 +501,18 @@ res.status(200).json({
 }
 // /admin/allTickets
 
-exports.getAllTickets = async (req, res, next) => {
+exports.postAllTickets = async (req, res, next) => {
+  const dateString = req.body.date;
+  const dateVn = moment.tz(dateString, "Asia/Ho_CHi_Minh");
+  const endDay = dateVn.clone().endOf('day');
+  const startDay = dateVn.clone().startOf('day');
   const tickets = await model.Ticket.findAll({
+    raw: true,
     attributes: ['id', 'spotId', 'startTime', 'finishTime', 'plate', 'vehicleType', 'status'],
-   
+    where: {
+      startTime: {[Op.between]: [startDay.toDate(), endDay.toDate()]}
+    }
+    
   })
   if(!tickets) return res.status(200).json({
     meseage: "success", 
@@ -537,30 +544,20 @@ exports.getAllTickets = async (req, res, next) => {
 
 // xem toàn bộ reservation hiện tại
 // admin/nowReservation
-exports.getNowReservation = async(req, res, next) => {
-    const date = new Date().toLocaleDateString('sv-SE');
-    const time = new Date().toLocaleTimeString('sv-SE');
-    const hour = Number(time.split(':')[0]);
-
-    const [reservation1, reservation2] = await Promise.all([
-      model.Reservation.findAll({
-        where: {
-          dateIn : date, 
-          startBlock: {[Op.gt]: hour },
-          status: 'CONFIRMED'
-        }
-      }),
-      model.Reservation.findAll({
-        where: {
-          dateOut: date,
-          [Op.and] : [sequelize.literal(`(startBlock+blockCount - 24) > ${hour} `)],
-          status: 'CONFIRMED'
-        }
-      })
-    ])
-    
-    const reservations = [...reservation1, ...reservation2];
-    if(reservations.length > 0) return res.status({
+// code lại
+exports.postReservation = async(req, res, next) => {
+    const dateString = req.body.date;
+    const dateVN = moment.tz(dateString, "Asia/Ho_Chi_Minh");
+    const endDay = dateVN.clone().endOf('day');
+    const startDay = dateVN.clone().startOf('day');
+    const reservations = await model.Reservation.findAll({
+      raw: true,
+      where: {
+        dateIn: {[Op.between]: [startDay.toDate(),endDay.toDate()]},
+        status: {[Op.in]: ['CONFIRMED', 'CHECKIN', 'CHECKOUT', 'NOSHOW']}
+      }
+    })
+    if(reservations.length > 0) return res.status(200).json({
       message: "success",
       reservations: reservations
     })
@@ -696,11 +693,12 @@ exports.getVehicleRatio = async (req, res, next )=> {
     else if(spot.vehicleType === 'MOTORBIKE' && spot.slotType === 'OFFLINE') offlineMotorNumber ++;
   })
 
-  const vehicleSum = onlineCarNumber + onlineMotorNumber + offlineCarNumber + offlineMotorNumber || 1;
-  const onlineCarRate = Math.round((onlineCarNumber/vehicleSum)*100);
-  const onlineMotorRate = Math.round((onlineMotorNumber/vehicleSum)*100);
-  const offlineCarRate = Math.round((offlineCarNumber / vehicleSum) * 100);
-  const offlineMotorRate = Math.round((offlineMotorNumber /vehicleSum) * 100);
+  const vehicleSumOnline = onlineCarNumber + onlineMotorNumber  || 1;
+  const vehicleSumOffline = offlineCarNumber + offlineMotorNumber || 1;
+  const onlineCarRate = Math.round((onlineCarNumber/vehicleSumOnline)*100);
+  const onlineMotorRate = Math.round((onlineMotorNumber/vehicleSumOnline)*100);
+  const offlineCarRate = Math.round((offlineCarNumber / vehicleSumOffline) * 100);
+  const offlineMotorRate = Math.round((offlineMotorNumber /vehicleSumOffline) * 100);
   
   return res.status(200).json({
     message: "success",
@@ -751,7 +749,7 @@ exports.postTrafficFlow = async (req, res, next ) => {
   let checkOutNumbers = new Array(24).fill(0);
   const tickets =  await model.Ticket.findAll({where: {date: date}, raw: true});
   tickets.map(ticket => {
-    console.log(ticket)
+    // console.log(ticket)
     const timeIn = ticket.startTime.toLocaleString("sv-SE", {
     timeZone: "Asia/Ho_Chi_Minh", 
     hour12: false 
