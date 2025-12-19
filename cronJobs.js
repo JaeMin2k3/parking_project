@@ -65,7 +65,7 @@ async function cleanNoShowReservations(t) {
         raw: true, 
         transaction: t
     });
-
+    console.log(overTimeReservations)
     if (overTimeReservations.length === 0) return 0;
 
     // Chuẩn bị dữ liệu
