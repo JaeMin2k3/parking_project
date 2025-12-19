@@ -768,7 +768,6 @@ exports.getReservations =  async (req, res, next) =>{
     message: "success",
     reservations: []
   })
-
   const mapReservations = reservations.map(async (reservation) => {
     let color;
     const spot = model.Spot.findOne({where: {id: reservation.spotId}, paranoid: false});

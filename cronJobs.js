@@ -102,71 +102,131 @@ async function cleanNoShowReservations(t) {
     return overTimeReservations.length;
 }
 
-async function handleTimeOut(t) {
-    const hour = Number(moment().tz("Asia/Ho_Chi_Minh").format("HH:mm:ss").split(":")[0]);
+async function handleTimeOut() {
     const affter15Time = moment().tz("Asia/Ho_Chi_Minh").add(15, 'minutes').format('YYYY-MM-DD HH:mm:ss');
-    const nowTime = moment().tz("Asia/Ho_Chi_Minh").format('YYYY-MM-DD HH:mm:ss');
+    const affter13Time = moment().tz("Asia/Ho_Chi_Minh").add(13, 'minutes').format('YYYY-MM-DD HH:mm:ss');
     const reservations = await model.Reservation.findAll({
         attributes: ['userId'],
         raw: true,
         where: {
             channel: 'ONLINE',
             status: "CHECKIN",
-            dateOut: {[Op.between]: [nowTime, affter15Time]}
+            dateOut: {[Op.between]: [affter13Time, affter15Time]}
         },
-        transaction: t
     })
-    if(!reservations) return 0;
-    for(let i = 0 ; i < reservations.length ; i++){
-        const user = await model.Customer.findByPk(reservations[i].userId);
-        await mailer.sendMail({
-            to: user.gmail,
-            from: process.env.GMAIL_USER,
-            html: `Chào bạn, thời gian đặt chỗ của bạn sắp hết, vui lòng ra bãi để lấy xe, không chúng tôi sẽ phạt tiền`
-        })
-    }
+    if (!reservations || reservations.length === 0) return 0;
+    const emailPromises = reservations.map(async (res) => {
+        const user = await model.Customer.findByPk(res.userId);
+        if (user && user.gmail) {
+             return mailer.sendMail({
+                to: user.gmail,
+                from: process.env.GMAIL_USER,
+                subject: "Cảnh báo hết giờ đỗ xe",
+                html: `Chào bạn, thời gian đặt chỗ của bạn sắp hết (còn 15 phút), vui lòng ra bãi để lấy xe.`
+            }).catch(err => console.error(`Failed to email user ${res.userId}`, err));
+        }
+    });
+    await Promise.all(emailPromises);
     return reservations.length;
 }
 async function joinTwoReservations(t) {
-     const hour = Number(moment().tz("Asia/Ho_Chi_Minh").format("HH:mm:ss").split(":")[0]);
-     const date = moment().tz("Asia/Ho_Chi_Minh").format("YYYY-MM-DD");
-    const affter3Time = moment().tz("Asia/Ho_Chi_Minh").add(3, 'minutes').format('YYYY-MM-DD HH:mm:ss');
-    const nowTime = moment().tz("Asia/Ho_Chi_Minh").format('YYYY-MM-DD HH:mm:ss');
+    const nowMoment = moment().tz("Asia/Ho_Chi_Minh");
+    
+    //  Tạo khung giờ tìm kiếm
+    const nowTime = nowMoment.format('YYYY-MM-DD HH:mm:ss');
+    const after3Time = nowMoment.clone().add(3, 'minutes').format('YYYY-MM-DD HH:mm:ss');
+
+    //  Tính toán Block kế tiếp
+    let currentHour = Number(nowMoment.format("H")); 
+    let nextBlockIndex = currentHour + 1;
+    let nextBlockDate = nowMoment.format("YYYY-MM-DD");
+
+    if (currentHour === 23) {
+        nextBlockIndex = 0; 
+        nextBlockDate = nowMoment.clone().add(1, 'days').format("YYYY-MM-DD"); 
+    }
+
+    // 3. Tìm các đơn đang CHECKIN sắp hết giờ
     const reservations = await model.Reservation.findAll({
-        attributes: ['spotId', 'plate', 'vehicleType', 'id'],
+        attributes: ['spotId', 'plate', 'vehicleType', 'id', 'dateOut'], 
         raw: true,
         where: {
             channel: 'ONLINE',
             status: "CHECKIN",
-            dateOut: {[Op.between]: [nowTime, affter3Time]}
+            dateOut: { [Op.between]: [nowTime, after3Time] }
         },
         transaction: t
-    })
-    if(!reservations) return 0;
-    for(let i = 0 ; i < reservations.length ; i++){
-       const newReservation = await model.ReservationBlock.findOne({
-        raw: true,
-        attributes: ['reservationId'],
-        where: {
-            spotId: reservations.spotId,
-            date: date,
-            blockIndex: (hour + 1),
-        }
-       })
-       if(newReservation){
-        const [oldPayment, newPayment] = await Promise.all([
-            model.Payment.findOne({where: {reservationId: reservations[i].id}}),
-            model.Payment.findOne({where: {reservationId: newReservation.reservationId}})
-        ])
+    });
 
-            await model.Payment.update({costParking: (oldPayment.costParking + newPayment.costParking) }, {
-                where: {
-                    reservationId: oldPayment.reservationId
-                }
-            })
+    if (!reservations || reservations.length === 0) return 0;
+
+    let mergedCount = 0;
+
+   
+    for (const currentRes of reservations) {
+        // Tìm xem có đơn nào ĐANG CHỜ (PENDING) ở khung giờ tiếp theo cùng vị trí không
+        const nextResBlock = await model.ReservationBlock.findOne({
+            raw: true,
+            attributes: ['reservationId'],
+            where: {
+                spotId: currentRes.spotId,  
+                date: nextBlockDate,        
+                blockIndex: nextBlockIndex, 
+                status: 'PENDING'           
+            },
+            transaction: t
+        });
+
+        if (nextResBlock) {
+            const nextResId = nextResBlock.reservationId;
+
+            // Lấy thông tin thanh toán của cả 2 đơn
+            const [oldPayment, newPayment] = await Promise.all([
+                model.Payment.findOne({ where: { reservationId: currentRes.id }, transaction: t }),
+                model.Payment.findOne({ where: { reservationId: nextResId }, transaction: t })
+            ]);
+            
+            // Lấy thông tin thời gian kết thúc của đơn mới để gán cho đơn cũ
+            const nextReservationInfo = await model.Reservation.findByPk(nextResId, {
+                attributes: ['dateOut'],
+                transaction: t
+            });
+
+            if (oldPayment && newPayment && nextReservationInfo) {
+                await Promise.all([
+                    //  Dồn tiền đơn mới vào đơn cũ
+                    model.Payment.update(
+                        { costParking: (oldPayment.costParking + newPayment.costParking) },
+                        { where: { reservationId: currentRes.id }, transaction: t }
+                    ),
+
+                    // Cập nhật dateOut đơn cũ = dateOut đơn mới
+                    model.Reservation.update(
+                        { dateOut: nextReservationInfo.dateOut },
+                        { where: { id: currentRes.id }, transaction: t }
+                    ),
+
+                    //  HỦY ĐƠN MỚI
+                    model.Reservation.update(
+                        { status: "CHECKOUT" },
+                        { where: { id: nextResId }, transaction: t }
+                    ),
+                    // Update bảng ReservationBlock
+                    model.ReservationBlock.update(
+                        { status: "CHECKOUT" },
+                        { where: { reservationId: nextResId }, transaction: t }
+                    ),
+                    // Update Payment đơn mới thành 0 hoặc đánh dấu đã chuyển
+                    model.Payment.update(
+                        { costParking: 0},
+                        { where: { reservationId: nextResId }, transaction: t }
+                    )
+                ]);
+                mergedCount++;
+            }
         }
     }
-    return reservations.length;
+    return mergedCount;
 }
 function initCronJobs() {
     // Chạy mỗi phút
@@ -176,7 +236,7 @@ function initCronJobs() {
                 const [pendingCount, noShowCount, timeOut, twoResvations] = await Promise.all([
                     cleanPendingReservations(t),
                     cleanNoShowReservations(t),
-                    handleTimeOut(t),
+                    handleTimeOut(),
                     joinTwoReservations(t)
                 ]);
 

@@ -13,9 +13,7 @@ module.exports = (sequelize) => {
   tableName: 'reservationBlocks',
   timestamps: false,
   indexes: [
-    // 1 slot - 1 ngày - 1 giờ chỉ có 1 reservation
     { unique: true, fields: ['spotId', 'date', 'blockIndex'] },
-    // tránh double insert trong 1 reservation
     { unique: true, fields: ['reservationId', 'blockIndex'] },
   ],
 });
