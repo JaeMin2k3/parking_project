@@ -3,7 +3,7 @@ const crypto = require('crypto')
 const {mailer} = require('../config/mailer')
 module.exports = async function createAndSendVerifyLink(user, t) {
   // Xoá token cũ chưa dùng 
-  await model.UserVerify.destroy({ where: { gmail_customer: user.gmail, usedAt: null }, transaction: t });
+  await model.UserVerify.destroy({ where: { gmailCustomer: user.gmail, usedAt: null }, transaction: t });
   console.log(user)
   const rawToken = crypto.randomBytes(32).toString('hex');
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');

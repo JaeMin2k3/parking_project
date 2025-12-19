@@ -62,7 +62,7 @@ exports.postImageIn = async (req, res, next) => {
             return null; 
         });
 
-    let transaction; 
+    let transaction = await sequelize.transaction();
 
     try {
         //  lấy thời gian hiện tại
@@ -72,7 +72,7 @@ exports.postImageIn = async (req, res, next) => {
         const data = await plateTask;
         const typeRaw = data.results[0]?.vehicle?.type;
         const plate = data.results[0]?.plate?.toUpperCase();
-
+        console.log("typeRaw" + typeRaw)
         // Validate biển số
         if (!plate) {
             return res.status(400).json({ 
@@ -89,7 +89,7 @@ exports.postImageIn = async (req, res, next) => {
         }
 
         
-        transaction = await sequelize.transaction();
+        
 
         // Kiểm tra xem xe đã có trong bãi chưa 
         const checkVehicle = await model.Ticket.findOne({
@@ -128,7 +128,7 @@ exports.postImageIn = async (req, res, next) => {
             limit: 2,
             transaction
         });
-        console.log(reservations)
+        console.log("reservation" + reservations)
         let spotId = null;
         let area = null;
         let position = null;
@@ -141,6 +141,7 @@ exports.postImageIn = async (req, res, next) => {
           
           
         if(!offTransfer){
+          
             console.log("có reservation");
             const nowObj = moment(now); 
             for(let i = 0 ; i < reservations.length ; i ++){
@@ -158,10 +159,11 @@ exports.postImageIn = async (req, res, next) => {
             // thời gian còn lại > 10 cho check in
             else if(minutesLeft > 10 && i <= reservations.length -1) {
               reservation = reservations[i];
+              spotId = reservation.spotId
               break;
             }
             // trường hợp vào sớm 5 phút 
-            else if( minutesLeft > 10 && diffMinutes < 5) {reservation = reservations[i]; break;}
+            else if( minutesLeft > 10 && diffMinutes < 5) {reservation = reservations[i]; spotId = reservation.spotId; break;}
             // trường hợp vào sớm trong khoảng 5 - 60 phút bảo -> chưa đến giờ vào
             else if( minutesLeft > 10 && 60 >= diffMinutes  && diffMinutes > 5) {
               await transaction.rollback();
@@ -175,14 +177,9 @@ exports.postImageIn = async (req, res, next) => {
              }
             }
           }
-           
+           console.log(reservation)
           // kiểm tra
           if(!offTransfer){
-
-            spotId = reservation.spotId;
-            area = reservation.area;
-            position = reservation.position;
-            ticketReservationId = reservation.id;
             if(reservation.isOverNight){
               bookedEnd = (reservation.startBlock + reservation.blockCount) % 24
             }else bookedEnd = reservation.startBlock + reservation.blockCount;            
@@ -198,9 +195,9 @@ exports.postImageIn = async (req, res, next) => {
                 paranoid: true,
                 transaction
             });
-
             // Nếu Spot lỗi/bảo trì -> Tìm Spot thay thế
             if (!spot ) {
+              console.log("spot không khả thi")
                 // tìm slot online thay thế
                 let newSpot = await findReplaceTime(reservation, transaction);
                 
@@ -229,7 +226,7 @@ exports.postImageIn = async (req, res, next) => {
                 console.log(spotId + "newSpotID");
                 area = newSpot.area;
                 position = newSpot.position;
-                
+                ticketReservationId = reservation.id;
                 // Update Reservation và reservationBlock trỏ sang Spot mới
                 Promise.all([
                   await model.Reservation.update({ spotId: spotId, status: 'CHECKIN' },{ where: { id: reservation.id }, transaction }),
@@ -237,6 +234,11 @@ exports.postImageIn = async (req, res, next) => {
                 ])
                 
             }else {
+            spotId = spot.id;
+            area = spot.area;
+            position = spot.position;
+            console.log("reservatioid"+ reservation.id)
+            ticketReservationId = reservation.id;
               // nếu mà spot vẫn hoạt động tốt
                Promise.all([
                   await model.Reservation.update({ status: 'CHECKIN' },{ where: { id: reservation.id }, transaction }),
@@ -312,10 +314,10 @@ exports.postImageIn = async (req, res, next) => {
             staffUsername: req.username
         }, { transaction });
 
-        
+        console.log("Result" + area + " " + position);
         await transaction.commit();
 
-        
+        console.log("Result" + area + " " + position);
         res.status(200).json({
             message: "Check-in thành công",
             area: area,
@@ -405,7 +407,7 @@ exports.postImageOut = async(req,res,next) => {
       return res.status(404).json({message: "xe này không tồn tại"})
     }
     // console.log(ticket)
-    
+    console.log(ticket)
     const [reservation, payment] = await Promise.all([
           // khởi tạo lấy reservation trước
           model.Reservation.findOne({raw: true, where: {id: ticket.reservationId}}),
@@ -420,7 +422,7 @@ exports.postImageOut = async(req,res,next) => {
             })
 
     ]);
-    
+    console.log("reservation" + reservation)
 
       let totalPrice = 0;
       // tính tiền
@@ -434,8 +436,7 @@ exports.postImageOut = async(req,res,next) => {
       const minutes = hours * 60;
       const standard = await parkingRateStandard;
       const overtime = await parkingRateOvertime;
-      const reservation1 = await reservation;
-      console.log(reservation1)
+      
       let payedMoney = 0;
       // th: có payment
       console.log("payment day" + payment);
@@ -443,9 +444,9 @@ exports.postImageOut = async(req,res,next) => {
           payedMoney = payment.costParking;
           currency = payment.currency;
           console.log(payedMoney + " " + currency)
-          if(hours > reservation1.blockCount){
+          if(hours > reservation.blockCount){
             console.log("luong chạy vao day")
-            totalPrice = reservation1.blockCount*standard.unitPrice + overtime.unitPrice*(Math.ceil(hours - reservation1.blockCount)) - payedMoney;
+            totalPrice = reservation.blockCount*standard.unitPrice + overtime.unitPrice*(Math.ceil(hours - reservation.blockCount)) - payedMoney;
           }else{
             totalPrice = 0;
           }
@@ -474,7 +475,7 @@ exports.postImageOut = async(req,res,next) => {
 
           // tạo hoá đơn
           const bill = await model.Bill.create({
-            channel: reservation1.channel,
+            channel: reservation.channel,
             payedMoney: payedMoney,
             startTime: start,
             finishTime: end,
@@ -513,7 +514,7 @@ exports.postImageOut = async(req,res,next) => {
           });
       } catch (error) {
         console.log(error);
-        transaction.rollback();
+        await transaction.rollback();
         next(error);
     }
 }

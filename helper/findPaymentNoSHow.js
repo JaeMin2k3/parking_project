@@ -17,7 +17,6 @@ module.exports = async function findPaymentNoSHow(start, end) {
     },
     include: [{
         model: model.Payment, 
-        as: 'payment', 
         where: { status: 'SUCCEEDED' }, 
         required: true
     }]

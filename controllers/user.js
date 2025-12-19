@@ -315,7 +315,8 @@ exports.postForgetPw = async(req, res, next) => {
 // /user/parking-lot/available
 
 exports.postAvailableSlot = async (req, res, next) => {
-  const {timeIn, timeOut, dateTimeIn, dateTimeOut, vehicleType} = req.body;
+  try {
+    const {timeIn, timeOut, dateTimeIn, dateTimeOut, vehicleType} = req.body;
   
   // Validate input
   if (timeIn === undefined || timeOut === undefined || !dateTimeIn || !dateTimeOut || !vehicleType) {
@@ -415,7 +416,11 @@ if(!freeSpots) return res.status(404).json({
   })
   
 }
-
+  catch (error) {
+    console.log(error)
+  }
+  
+}
 // /user/reservation
 exports.postReservation = async (req, res, next) => {
   const {id, timeIn, timeOut, dateTimeIn, dateTimeOut, vehicleType, plate} = req.body;

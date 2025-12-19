@@ -19,7 +19,7 @@ router.post('/forget-password', controllerUser.postForgetPw);
 router.post('/parking-lot/available', isUser, controllerUser.postAvailableSlot)
 router.post('/reservation', isUser, controllerUser.postReservation);
 router.post('/payment/vnpay/create', isUser, controllerUser.postCreateVnpayPayment);
-router.get('/payment/vnpay/return', isUser, controllerUser.vnpayIpn)
+router.get('/payment/vnpay/return', controllerUser.vnpayIpn)
 
 
 router.get('/parking/status', controllerUser.getAllSlotStatus);
