@@ -20,7 +20,7 @@ exports.getAllStaffs = async (req,res, next) => {
         role: "staff",
         
       },
-      paranoid: false,
+      paranoid: true,
       attributes: ["name", "date","username", "status", "createdAt",'deletedAt'],
       order: [['createdAt', 'DESC']],
       raw: true

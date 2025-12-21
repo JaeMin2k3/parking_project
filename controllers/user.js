@@ -486,7 +486,7 @@ exports.postReservation = async (req, res, next) => {
       channel: 'ONLINE',
       plate: plate,
       vehicleType: vehicleType,
-      user_id: req.username,
+      userId: req.username,
       spotId: id,
       isOverNight: isOverNight
     },{transaction})
@@ -762,7 +762,7 @@ exports.getActiveReservationNumbers = async (req, res, next) => {
 }
 
 exports.getReservations =  async (req, res, next) =>{
-  const idUser = req.body.username;
+  const idUser = req.username;
   const reservations = await model.Reservation.findAll({
     where:{
       userId: idUser,
