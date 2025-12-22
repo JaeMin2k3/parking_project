@@ -39,7 +39,7 @@ exports.getAllStaffs = async (req,res, next) => {
 // admin/staff/:id
 exports.getStaff = async (req,res,next) => {
   const username = req.params.id;
-  if(!username) {res.status(404).json({message: "username đang rỗng"})};
+  if(!username) {res.status(404).json({message: "username rỗng"})};
   try {
     const staff = await model.Staff.findOne({
       attributes: ['username', 'name', 'date', 'role', 'status', 'deletedAt'],
