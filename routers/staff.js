@@ -9,7 +9,7 @@ const storge = multer.diskStorage({
     cb(null, 'upload')
   },
   filename: function(req, file, cb){
-    cb(null, new Date().toLocaleDateString + '-' + file.filename);
+   cb(null, Date.now() + '-' + file.originalname);
   }
 })
 const upload = multer({storage: storge});
