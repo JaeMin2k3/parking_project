@@ -7,7 +7,6 @@ module.exports = async function uploadAndCleanup(filePath) {
       await fs.unlinkSync(filePath);
     } catch (error) {
       console.log(error)
-      nextTick(error)
     }
   }
   return uploadResult;
