@@ -21,7 +21,7 @@ exports.getAllStaffs = async (req,res, next) => {
         
       },
       paranoid: true,
-      attributes: ["name", "date","username", "status", "createdAt",'deletedAt'],
+      attributes: ["name", "date","username", "status", "createdAt"],
       order: [['createdAt', 'DESC']],
       raw: true
       });
@@ -204,14 +204,19 @@ exports.getInfor = async (req,res,next) =>{
 // /admin/spots/:area
 exports.getAllSpotWithArea = async (req,res, next) => {
   const area = req.params.area;
-  const spots = await model.Spot.findAll({
-    attributes: ['area', 'position', 'vehicleType', 'slotType', 'status'],
+  try {
+    const spots = await model.Spot.findAll({
+    attributes: ['area', 'position', 'vehicleType', 'slotType', 'status', 'isActive'],
     where: {area: area},
     paranoid: true,
     order: [['position', 'ASC']],
   });
   if(!spots) return res.status(200).json({meseage: "spot trống", spots: []})
   return res.status(200).json({message: "success", spots: spots})
+  } catch (error) {
+    console.log(error);
+  }
+  
 }
 
 // /admin/spots/:spotId
@@ -347,19 +352,26 @@ exports.postDeleteSpot = async(req,res,next) => {
 
 // admin/edit/:idSpot
 exports.postEditSpot = async (req, res, next) => {
-  const spotId = req.body.idSpot;
-  const { status } = req.body; 
+  const spotId = req.params.idSpot;
+  let { isActive } = req.body; 
   const transaction = await sequelize.transaction();
   try {
     const spot = await model.Spot.findByPk(spotId, {
+      raw:true,
+      attributes: ['isActive'],
       transaction,
       lock: true
     });
-    if(!spot) return res.status(404).json({message: "spot không tồn tại"});
-    if(status !== spot.status){
-      await model.Spot.update({status: status}, {where:{
+    if(!spot){
+      await transaction.rollback();
+      return res.status(404).json({message: "spot không tồn tại"});
+    } 
+    if(Boolean(isActive) !== Boolean(spot.isActive)){
+      await model.Spot.update({isActive: Boolean(isActive)}, {where:{
         id: spotId
-      }})
+      },
+      transaction,
+    })
     }
     await transaction.commit();
     return res.status(200).json({message: "success"});
