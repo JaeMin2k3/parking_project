@@ -1,7 +1,7 @@
 const model = require('../models/index')
 const moment = require('moment-timezone')
 const {Op} = require('sequelize')
-module.exports = async function findAvailableSpotOnlie(vehicleType, slotType, transaction) {
+module.exports = async function findAvailableSpotOnline(vehicleType, slotType, transaction) {
   const hour = Number(moment().tz("Asia/Ho_Chi_Minh").format("HH:mm:ss").split(":")[0]);
   const day = moment().tz("Asia/Ho_Chi_Minh").format("YYYY-MM-DD");
   const tomorrow = moment().tz("Asia/Ho_Chi_Minh").add(1, 'days').format("YYYY-MM-DD");

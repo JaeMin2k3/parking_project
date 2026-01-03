@@ -6,7 +6,7 @@ require('dotenv').config();
 const crypto = require('crypto');
 const { mailer } = require('../config/mailer');
 const sequelize = require('../config/database');
-
+const io = require('../socket');
 const isSlotAvailable = require('../helper/isSlotAvailable');
 const createBlocksFromReservation = require('../helper/createBlocksFromReservation');
 const moment = require('moment-timezone');
@@ -617,92 +617,112 @@ exports.postCreateVnpayPayment = async (req, res, next) => {
 
 
 exports.vnpayIpn = async (req, res) => {
-  // VNPAY gọi vào đây với method GET và các tham số trên URL (req.query)
   try {
-    // Xác thực chữ ký (Checksum) - Bảo mật
+    // 1. Xác thực chữ ký
     const verify = vnpay.verifyIpnCall(req.query);
-    console.log(req.query);
     if (!verify.isSuccess) {
       return res.status(200).json({ RspCode: '97', Message: 'Checksum failed' });
     }
 
-    // Lấy dữ liệu từ VNPAY
-    const vnp_TxnRef = req.query.vnp_TxnRef;       // Mã tham chiếu (khớp với create)
-    const vnp_Amount = req.query.vnp_Amount;       // Số tiền * 100
-    const vnp_ResponseCode = req.query.vnp_ResponseCode; 
-    console.log(vnp_ResponseCode);
+    // 2. Lấy dữ liệu
+    const vnp_TxnRef = req.query.vnp_TxnRef;
+    const vnp_Amount = req.query.vnp_Amount;
+    const vnp_ResponseCode = req.query.vnp_ResponseCode;
+
+    // 3. Tìm Payment
     const payment = await model.Payment.findOne({
       where: { vnpTxnRef: vnp_TxnRef },
     });
 
+    // 4. Validate dữ liệu
     if (!payment) {
       return res.status(200).json({ RspCode: '01', Message: 'Order not found' });
     }
 
-    // Kiểm tra số tiền 
-    if (Number(payment.costParking) !== Number(vnp_Amount/100)) {
+    if (Number(payment.costParking) !== Number(vnp_Amount / 100)) {
       return res.status(200).json({ RspCode: '04', Message: 'Invalid amount' });
     }
 
-    // 6. Kiểm tra xem đơn này đã xử lý chưa (Chống trùng lặp)
     if (payment.status === 'SUCCEEDED' || payment.status === 'FAILED') {
       return res.status(200).json({ RspCode: '02', Message: 'Order already confirmed' });
     }
 
+    // 5. Xử lý Transaction
     const t = await sequelize.transaction();
-
+    const io = socket.getIO();
     try {
       if (vnp_ResponseCode === '00') {
-       Promise.all([
-        await model.Payment.update({status: 'SUCCEEDED'},{where: {reservationId: payment.reservationId}, t}),
-        await model.Reservation.update({status: 'CONFIRMED'},{where: {id: payment.reservationId}, t}),
-        await model.ReservationBlock.update(
-          { status: 'CONFIRMED' },
-          {
-            where: {
-              reservationId: payment.reservationId,
-              status: 'PENDING'
-            },
-            transaction: t
-          }
-        )
-       ])
+        // --- THÀNH CÔNG ---
+        await Promise.all([
+          model.Payment.update({ status: 'SUCCEEDED' }, { where: { reservationId: payment.reservationId }, transaction: t }),
+          model.Reservation.update({ status: 'CONFIRMED' }, { where: { id: payment.reservationId }, transaction: t }),
+          model.ReservationBlock.update(
+            { status: 'CONFIRMED' },
+            { 
+              where: { reservationId: payment.reservationId, status: 'PENDING' }, 
+              transaction: t 
+            }
+          )
+        ]);
 
-        await t.commit(); 
+        await t.commit();
+
+        
+        try {
+            
+            io.emit(`payment_update_${payment.reservationId}`, { 
+                status: 'success', 
+                message: 'Thanh toán thành công (IPN)',
+                reservationId: payment.reservationId
+            });
+        } catch (socketErr) {
+            console.error("Socket emit error:", socketErr.message);
+        }
+       
         return res.status(200).json({ RspCode: '00', Message: 'Success' });
 
       } else {
-        Promise.all([
-        await model.Payment.update({status: 'FAILED'},{where: {reservationId: payment.reservationId}, t}),
-        await model.Reservation.update({status: 'CANCELLED'},{where: {id: payment.reservationId}, t}),
-        await model.ReservationBlock.update(
-          { status: 'CANCELLED' },
-          {
-            where: {
-              reservationId: { [Op.in]: payment.reservationId },
-              status: 'PENDING'
-            },
-            transaction: t
-          }
-        )
-       ])
+        // --- THẤT BẠI ---
+        await Promise.all([
+          model.Payment.update({ status: 'CANCELLED' }, { where: { reservationId: payment.reservationId }, transaction: t }),
+          model.Reservation.update({ status: 'CANCELLED' }, { where: { id: payment.reservationId }, transaction: t }),
+          model.ReservationBlock.update(
+            { status: 'CANCELLED' },
+            { 
+              where: { reservationId: payment.reservationId, status: 'PENDING' }, 
+              transaction: t 
+            }
+          )
+        ]);
 
         await t.commit();
+
+      
+        try {
+            io.emit(`payment_update_${payment.reservationId}`, { 
+                status: 'failed', 
+                message: 'Thanh toán thất bại (IPN)' 
+            });
+        } catch (socketErr) {
+            console.error("Socket emit error:", socketErr.message);
+        }
+        
+
         return res.status(200).json({ RspCode: '00', Message: 'Success' });
       }
+
     } catch (dbError) {
       await t.rollback();
       console.error('Database Transaction Error:', dbError);
-      return res.status(200).json({ RspCode: '99', Message: 'Unknow error' });
+      return res.status(200).json({ RspCode: '99', Message: 'Unknown error' });
     }
 
   } catch (error) {
     console.error('VNPAY IPN Error:', error);
-    return res.status(200).json({ RspCode: '99', Message: 'Unknow error' });
+    return res.status(200).json({ RspCode: '99', Message: 'Unknown error' });
   }
 };
 
-const io = require('../socket');
 
 // /user/parking/status
 exports.getAllSlotStatus = async (req, res, next) => {
@@ -761,41 +781,60 @@ exports.getActiveReservationNumbers = async (req, res, next) => {
   })
 }
 
-exports.getReservations =  async (req, res, next) =>{
+exports.getReservations = async (req, res, next) => {
   const idUser = req.username;
+  
   const reservations = await model.Reservation.findAll({
-    where:{
+    where: {
       userId: idUser,
-      status: {[Op.in]: ['PENDING', 'CONFIRMED', 'CHECKIN',"CHECKOUT"] }
-    } 
+      status: { [Op.in]: ["PENDING", "CONFIRMED", "CHECKIN", "CHECKOUT"] },
+    },
+    order: [['dateIn', 'ASC']]
   });
-  if(!reservations) return res.status(200).json({
-    message: "success",
-    reservations: []
-  })
-  const mapReservations = reservations.map(async (reservation) => {
-    let color;
-    const spot = model.Spot.findOne({where: {id: reservation.spotId}, paranoid: false});
-    if(reservation.status === 'PENDING') color = '#F59E0B'
-    else if(reservation.status === 'CONFIRMED') color = '#10B981'
-    else if(reservation.status === 'CHECKIN') color = '#0EA5E9'
-    else if(reservation.status === 'CHECKOUNT') color = '#ca4126ff'
-    const spotResult = await spot;
-    return {
-      id: reservation.id,
-      dateIn: reservation.dateIn,
-      dateOut: reservation.dateOut,
-      startBlock: reservation.startBlock,
-      blockCount: reservation.blockCount,
-      plate: reservation.plate,
-      vehicleType: reservation.vehicleType,
-      area: spotResult.area || null,
-      position: spotResult.position || null,
-    }
-  })
+
+  if (!reservations || reservations.length === 0) {
+    return res.status(200).json({
+      message: "success",
+      reservations: [],
+    });
+  }
+
+  // Dùng Promise.all để đợi tất cả các map xử lý xong
+  const mapReservations = await Promise.all(
+    reservations.map(async (reservation) => {
+      let color;
+      
+      // Tìm spot tương ứng
+      const spotResult = await model.Spot.findOne({
+        where: { id: reservation.spotId },
+        paranoid: false,
+      });
+
+      
+      if (reservation.status === "PENDING") color = "#F59E0B";
+      else if (reservation.status === "CONFIRMED") color = "#10B981";
+      else if (reservation.status === "CHECKIN") color = "#0EA5E9";
+      else if (reservation.status === "CHECKOUT") color = "#ca4126ff"; 
+
+      return {
+        id: reservation.id,
+        dateIn: reservation.dateIn,
+        dateOut: reservation.dateOut,
+        startBlock: reservation.startBlock,
+        blockCount: reservation.blockCount,
+        plate: reservation.plate,
+        vehicleType: reservation.vehicleType,
+        color: color, 
+        area: spotResult ? spotResult.area : null,
+        position: spotResult ? spotResult.position : null,
+      };
+    })
+  );
+
+  console.log("Dữ liệu cuối cùng: ", mapReservations);
 
   return res.status(200).json({
     message: "success",
-    reservations: mapReservations
-  })
-}
+    reservations: mapReservations,
+  });
+};

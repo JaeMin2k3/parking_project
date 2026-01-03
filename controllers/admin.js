@@ -43,7 +43,8 @@ exports.getStaff = async (req,res,next) => {
   try {
     const staff = await model.Staff.findOne({
       attributes: ['username', 'name', 'date', 'role', 'status', 'deletedAt'],
-      where: {username: username}
+      where: {username: username},
+      paranoid: false
     })
     if(!staff){res.status(404).json({message: "nhân viên không tồn tại"})};
     return res.status(200).json({
@@ -164,7 +165,9 @@ exports.postRestoreStaff = async (req, res, next) => {
     },{
       where: {
         username: id,
-      }, transaction
+      },
+      paranoid: false,
+      transaction
     })
     await transaction.commit();
     return res.status(200).json({message: "update thành công"})
@@ -177,7 +180,8 @@ exports.postRestoreStaff = async (req, res, next) => {
 // /admin/trash/deletedStaffs
 exports.getDeletedStaff = async (req,res,next) => {
   const deletedStaffs = await model.Staff.findAll({where:{
-    deletedAt: {[Op.ne] : null}
+    deletedAt: {[Op.ne] : null},
+    paranoid: false
   }})
   if(!deletedStaffs) return res.status(200).json({message: "success", staffs: []});
   return res.status(200).json({message: "success", staffs: deletedStaffs});
@@ -206,7 +210,8 @@ exports.getAllSpotWithArea = async (req,res, next) => {
   const area = req.params.area;
   try {
     const spots = await model.Spot.findAll({
-    attributes: ['area', 'position', 'vehicleType', 'slotType', 'status', 'isActive'],
+    raw: true,
+    attributes: ['id','area', 'position', 'vehicleType', 'slotType', 'status', 'isActive'],
     where: {area: area},
     paranoid: true,
     order: [['position', 'ASC']],
@@ -289,7 +294,8 @@ exports.postRestoreSpot = async (req, res, next) => {
 // /admin/trash/deletedStaffs
 exports.getDeletedStaffs = async (req, res, next) => {
   const deletedStaffs = await model.Staff.findAll({where: {
-    deletedAt: {[Op.ne]: null}
+    deletedAt: {[Op.ne]: null},
+    paranoid: false
   }});
   if(!deletedStaffs) return res.status(200).json({message: "success", staffs: []});
   return res.status(200).json({meseage: "success", staffs: deletedStaffs})
@@ -325,9 +331,10 @@ exports.postNewSpots = async (req, res, next) => {
 // /admin/delete/:idSpot
 exports.postDeleteSpot = async(req,res,next) => {
   const id  = req.params.idSpot;
+  if(!id) return res.status(400).json({message: "không nhận được id"});
   const transaction =  await sequelize.transaction();
   try {
-    const spot = await model.Spot.findOne({where: {id: id}});
+    const spot = await model.Spot.findByPk(id);
     if(!spot) {
       await transaction.rollback();
       return res.status(404).json({meseage: "spotId không hợp lệ"});
@@ -341,7 +348,12 @@ exports.postDeleteSpot = async(req,res,next) => {
       await transaction.rollback();
       return res.status(409).json({meseage: "hiện tại đang có người đang đặt slot này bạn không thể xoá được"})
     }
+    const updateSpot = await model.Spot.update({deletedAt: new Date() },{where: {id: id}});
     await transaction.commit();
+    if(!updateSpot) {
+      await transaction.rollback();
+      return res.staus(500).json("lỗi không thể update") 
+    } 
     return res.status(200).json({message: "deleted successfully"});
   } catch (error) {
     console.log(error);
@@ -724,7 +736,7 @@ exports.getVehicleRatio = async (req, res, next )=> {
 exports.postNewParkingRateType = async (req, res, next) => {
   const {vehicleType, unitPrice, ticketType} = req.body;
   if(!vehicleType || !unitPrice || !ticketType) return res.status(404).json({message: "vui lòng gửi đầy đủ dữ liệu đầu vào"});
-  const transaction = sequelize.transaction();
+  const transaction = await sequelize.transaction();
   try {
     await model.ParkingRate.update({status: 'inactive'}, {where: {
       vehicleType: vehicleType,
@@ -747,12 +759,24 @@ exports.postNewParkingRateType = async (req, res, next) => {
 // /admin/ParkingRate
 exports.getParkingRate = async (req,res,next) => {
   const parkingRate = await model.ParkingRate.findAll({
-    attributes: ['vehicleType', 'unitPrice', 'currency', 'ticketType', 'createdAt', 'updatedAt', 'status']
+    attributes: ['vehicleType', 'unitPrice', 'currency', 'ticketType', 'createdAt', 'updatedAt', 'status'],
+    where: {
+      status: 'active'
+    }
+
   })
   if(!parkingRate) return res.status(404).json({message: "không tìm thấy biểu phí nào", parkingRate: []});
   return res.status(200).json({message: 'success', parkingRate: parkingRate});
 }
-
+// /admin/AllParkingRate
+exports.getAllParkingRate = async () => {
+  const parkingRate = await model.ParkingRate.findAll({
+    attributes: ['vehicleType', 'unitPrice', 'currency', 'ticketType', 'createdAt', 'updatedAt', 'status'],
+    order: [['updatedAt', 'ASC']]
+  })
+  if(!parkingRate) return res.status(404).json({message: "không tìm thấy biểu phí nào", parkingRate: []});
+  return res.status(200).json({message: 'success', parkingRate: parkingRate});
+}
 // /admin/traffic-flow
 exports.postTrafficFlow = async (req, res, next ) => {
   const date = req.body.date;
