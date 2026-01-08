@@ -504,16 +504,7 @@ const formattedData = mapStatus.map(spot => {
         channel: customerType     // ONLINE / OFFLINE / NONE
     };
 });
-io.getIO().emit('parkingStatus', {
-  action: 'updateParking',
-  data: {
-    mapStatus: formattedData,
-    availableSlot: availableSpot,
-    occupiedSlot: occupiedSpot,
-    bookedSlot: bookedSpot,
-    lockedSpot: lockedSpot
-  }
-})
+
 
 res.status(200).json({
     message: "success",
@@ -643,7 +634,7 @@ exports.getNowRevenue = async (req, res, next) => {
 exports.getMonthlyRevenue = async (req, res) => {
   try {
     const currentYear = new Date().getFullYear();
-    
+    // const currentYear = 2025
     // 1. Lấy dữ liệu từ DB, gom nhóm theo Tháng
     const revenueData = await model.Bill.findAll({
       attributes: [
@@ -762,23 +753,11 @@ exports.postNewParkingRateType = async (req, res, next) => {
 exports.getParkingRate = async (req,res,next) => {
   const parkingRate = await model.ParkingRate.findAll({
     attributes: ['vehicleType', 'unitPrice', 'currency', 'ticketType', 'createdAt', 'updatedAt', 'status'],
-    where: {
-      status: 'active'
-    }
+  })
+  if(!parkingRate) return res.status(404).json({message: "không tìm thấy biểu phí nào", parkingRate: []});
+  return res.status(200).json({message: 'success', parkingRate: parkingRate});
+}
 
-  })
-  if(!parkingRate) return res.status(404).json({message: "không tìm thấy biểu phí nào", parkingRate: []});
-  return res.status(200).json({message: 'success', parkingRate: parkingRate});
-}
-// /admin/AllParkingRate
-exports.getAllParkingRate = async () => {
-  const parkingRate = await model.ParkingRate.findAll({
-    attributes: ['vehicleType', 'unitPrice', 'currency', 'ticketType', 'createdAt', 'updatedAt', 'status'],
-    order: [['updatedAt', 'ASC']]
-  })
-  if(!parkingRate) return res.status(404).json({message: "không tìm thấy biểu phí nào", parkingRate: []});
-  return res.status(200).json({message: 'success', parkingRate: parkingRate});
-}
 // /admin/traffic-flow
 exports.postTrafficFlow = async (req, res, next ) => {
   const date = req.body.date;

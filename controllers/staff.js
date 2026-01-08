@@ -3,7 +3,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const platerecognizer = require('../helper/plateRecognizer');
-
+const io = require('../socket');
 const sequelize = require('../config/database');
 const uploadAndCleanup = require('../helper/uploadAndCleanup');
 
@@ -319,7 +319,13 @@ exports.postImageIn = async (req, res, next) => {
         console.log("Result" + area + " " + position);
         await transaction.commit();
 
-        console.log("Result" + area + " " + position);
+       io.getIO().emit('parkingStatus', {
+          action: 'updateParking',
+          data: {
+            spotId: spotId,
+            status: false
+          }
+        })
         res.status(200).json({
             message: "Check-in thành công",
             area: area,
@@ -330,7 +336,9 @@ exports.postImageIn = async (req, res, next) => {
         });
         try {
           const uploadResult = await uploadTask;
-          await model.Ticket.update({ urlCloudinaryCheckIn: uploadResult.secure_url,},{
+          await model.Ticket.update(
+            { urlCloudinaryCheckIn: uploadResult.secure_url,},
+            {
             where: {
               id: ticket.id
             }
@@ -511,6 +519,13 @@ exports.postImageOut = async(req,res,next) => {
           const billResponse = bill.toJSON();
           billResponse.startTime = moment(bill.startTime).tz("Asia/Ho_Chi_Minh").format("YYYY-MM-DD HH:mm:ss");
           billResponse.finishTime = moment(bill.finishTime).tz("Asia/Ho_Chi_Minh").format("YYYY-MM-DD HH:mm:ss");
+          io.getIO().emit('parkingStatus', {
+          action: 'updateParking',
+          data: {
+            spotId: reservation.spotId,
+            status: true,
+          }
+        })
           return res.status(200).json({
             message: "success",
             bill: billResponse, 

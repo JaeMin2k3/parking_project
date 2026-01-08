@@ -29,7 +29,7 @@ router.get('/MonthlyRevenue',isAdmin, controllerAdmin.getMonthlyRevenue);
 router.get('/vehicleRatio', isAdmin,controllerAdmin.getVehicleRatio);
 router.post('/newParkingRateType',isAdmin, controllerAdmin.postNewParkingRateType);
 router.get('/ParkingRate', isAdmin,controllerAdmin.getParkingRate);
-router.get('/AllParkingRate', isAdmin, controllerAdmin.getAllParkingRate)
+
 router.post('/traffic-flow', isAdmin,controllerAdmin.postTrafficFlow)
 
 
