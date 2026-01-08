@@ -22,9 +22,9 @@ module.exports = (sequelize) => {
   timestamps: false,
   index: [
     {unique: true, fields: ['dateIn', 'startBlock', 'plate', 'vehicleType']},
-    // Thứ tự ưu tiên: plate (định danh duy nhất) -> status -> date
+    // Thứ tự ưu tiên: plate  -> status -> date
     {fields: ['plate', 'status', 'dateIn', 'dateOut']},
-    // Index hỗ trợ tìm kiếm check-out (lúc này status là CHECKIN)
+    //hỗ trợ tìm kiếm check-out 
     {fields: ['plate', 'vehicleType']}]
   },
  

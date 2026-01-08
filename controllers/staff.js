@@ -11,7 +11,9 @@ const {Op} = require('sequelize');
 const moment = require("moment-timezone")
 const findReplaceTime = require('../helper/findReplaceTime')
 const findAvailableSpotOnlie = require('../helper/findAvailableSpotOnline')
-const findPaymentNoSHow = require('../helper/findPaymentNoSHow')
+const findPaymentNoSHow = require('../helper/findPaymentNoSHow');
+
+
 // staff/login
 exports.postLogin = async (req,res,next) => {
   const {username, password} = req.body;
@@ -111,7 +113,7 @@ exports.postImageIn = async (req, res, next) => {
         // đẩy ảnh lên cloud
         
 
-        // 2.2 Tìm Reservation hợp lệ
+        // Tìm Reservation hợp lệ
         const reservations = await model.Reservation.findAll({
             where: {
                 plate: plate,
@@ -367,7 +369,7 @@ exports.postImageOut = async(req,res,next) => {
       return res.status(400).json({message: "không thể xác định được loại xe hoặc biển số vui lòng chụp lại"});
     }
 
-    // bên thứ 3 trả về xe máy là motorbike, oto tra nhiều loại suv,.. -> phải xử lí
+    // bên thứ 3 trả về xe máy là motorbike, oto tra nhiều loại suv ->  xử lí
     let vehicleType = 'CAR';
     if(type === "Motorcycle"){
       vehicleType = "MOTORBIKE";
@@ -472,7 +474,9 @@ exports.postImageOut = async(req,res,next) => {
           await model.Spot.update({status: true}, {where: {id: ticket.spotId}, transaction});
           // đẩy ảnh lên cloud, để nhận về đường dẫn của ảnh
           const uploadResult = await uploadTask;
-
+          console.log("totalPrice" + " " + totalPrice);
+          console.log("payedMoney" + " " + payedMoney)
+          if(totalPrice < 0) totalPrice = 0;
           // tạo hoá đơn
           const bill = await model.Bill.create({
             channel: reservation.channel,
