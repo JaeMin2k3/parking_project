@@ -801,7 +801,7 @@ exports.getReservations = async (req, res, next) => {
     });
   }
 
-  // SỬA TẠI ĐÂY: Dùng Promise.all để đợi tất cả các map xử lý xong
+  
   const mapReservations = await Promise.all(
     reservations.map(async (reservation) => {
       let color;
