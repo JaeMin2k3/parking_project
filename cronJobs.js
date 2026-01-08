@@ -3,7 +3,7 @@ const cron = require('node-cron');
 const { Op } = require('sequelize');
 const model = require('./models/index');
 const sequelize = require('./config/database');
-const mailer = require('./config/mailer')
+const { mailer } = require('./config/mailer');
 const moment = require('moment-timezone');
 require('dotenv').config();
 //  Xử lý đơn chờ thanh toán quá hạn (PENDING -> CANCELLED)
@@ -81,7 +81,7 @@ async function cleanNoShowReservations(t) {
             payedMoney: cost,
             startTime: reservation.dateIn,
             finishTime: reservation.dateOut,
-            totalPrice: 0, // Hoặc bằng 'cost' nếu bạn muốn ghi nhận doanh thu này
+            totalPrice: 0, 
             urlCloudinaryCheckIn: null,
             urlCloudinaryCheckOut: null,
             ticketId: null,
@@ -118,7 +118,7 @@ async function handleTimeOut() {
     const emailPromises = reservations.map(async (res) => {
         const user = await model.Customer.findByPk(res.userId);
         if (user && user.gmail) {
-             return mailer.sendMail({
+             await  mailer.sendMail({
                 to: user.gmail,
                 from: process.env.GMAIL_USER,
                 subject: "Cảnh báo hết giờ đỗ xe",
@@ -134,7 +134,7 @@ async function joinTwoReservations(t) {
     
     //  Tạo khung giờ tìm kiếm
     const nowTime = nowMoment.format('YYYY-MM-DD HH:mm:ss');
-    const after3Time = nowMoment.clone().add(3, 'minutes').format('YYYY-MM-DD HH:mm:ss');
+    const after3Time = nowMoment.clone().add(5, 'minutes').format('YYYY-MM-DD HH:mm:ss');
 
     //  Tính toán Block kế tiếp
     let currentHour = Number(nowMoment.format("H")); 
@@ -164,39 +164,45 @@ async function joinTwoReservations(t) {
 
    
     for (const currentRes of reservations) {
-        // Tìm xem có đơn nào ĐANG CHỜ (PENDING) ở khung giờ tiếp theo cùng vị trí không
+        try {
+            console.log("tìm thấy")
+        // Tìm xem có đơn nào  ở khung giờ tiếp theo cùng vị trí không
         const nextResBlock = await model.ReservationBlock.findOne({
-            raw: true,
             attributes: ['reservationId'],
             where: {
-                spotId: currentRes.spotId,  
+                 
                 date: nextBlockDate,        
-                blockIndex: nextBlockIndex, 
-                status: 'PENDING'           
+                blockIndex: 16, //nextBlockIndex
+                status: 'CONFIRMED'           
             },
             transaction: t
         });
 
         if (nextResBlock) {
             const nextResId = nextResBlock.reservationId;
-
+            console.log(nextResId)
             // Lấy thông tin thanh toán của cả 2 đơn
             const [oldPayment, newPayment] = await Promise.all([
-                model.Payment.findOne({ where: { reservationId: currentRes.id }, transaction: t }),
-                model.Payment.findOne({ where: { reservationId: nextResId }, transaction: t })
+                model.Payment.findOne( {where: {reservationId: currentRes.id }, transaction: t }),
+                model.Payment.findOne( {where: {reservationId: nextResId }, transaction: t })
             ]);
             
             // Lấy thông tin thời gian kết thúc của đơn mới để gán cho đơn cũ
             const nextReservationInfo = await model.Reservation.findByPk(nextResId, {
+                raw: true,
                 attributes: ['dateOut'],
                 transaction: t
             });
-
+            
             if (oldPayment && newPayment && nextReservationInfo) {
+                console.log("checkout")
+                const oldCost = parseFloat(oldPayment.costParking) || 0;
+                const newCost = parseFloat(newPayment.costParking) || 0;
+                const totalCost = oldCost + newCost;
                 await Promise.all([
                     //  Dồn tiền đơn mới vào đơn cũ
                     model.Payment.update(
-                        { costParking: (oldPayment.costParking + newPayment.costParking) },
+                        { costParking: totalCost },
                         { where: { reservationId: currentRes.id }, transaction: t }
                     ),
 
@@ -225,6 +231,10 @@ async function joinTwoReservations(t) {
                 mergedCount++;
             }
         }
+        } catch (error) {
+            console.log(error)
+        }
+        
     }
     return mergedCount;
 }

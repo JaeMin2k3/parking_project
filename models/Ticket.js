@@ -17,9 +17,9 @@ module.exports = (sequelize) => {
     timestamps: false,
     index: [
       {fields: ['plate', 'vehicleType', 'status']},
-      // Giúp query tìm xe đang "active" cực nhanh
+      //tìm xe đang "active"  nhanh
       {fields: ['plate', 'status']},
-      // Nếu bạn thường xuyên thống kê doanh thu theo ngày
+      //  thống kê doanh thu theo ngày
       {fields: ['date']}
     ]
   });

@@ -2,6 +2,7 @@ const model = require('../models/index');
 const {Op} = require('sequelize')
 module.exports = async function findPaymentNoSHow(start, end) {
   const reservations = await model.Reservation.findAll({
+    raw: true,
     where: {
       status: 'NOSHOW',
       [Op.or]: [
@@ -23,8 +24,9 @@ module.exports = async function findPaymentNoSHow(start, end) {
   })
   
   const payments = reservations.map(res => {
+    console.log(res['Payment.costParking'])
       return {
-          costParking: res.payment.costParking, 
+          costParking: res['Payment.costParking'], 
           ...res.dataValues
       }
   });

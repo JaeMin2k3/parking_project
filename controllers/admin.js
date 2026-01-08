@@ -295,8 +295,10 @@ exports.postRestoreSpot = async (req, res, next) => {
 exports.getDeletedStaffs = async (req, res, next) => {
   const deletedStaffs = await model.Staff.findAll({where: {
     deletedAt: {[Op.ne]: null},
-    paranoid: false
-  }});
+    
+  },paranoid: false
+});
+  console.log(deletedStaffs)
   if(!deletedStaffs) return res.status(200).json({message: "success", staffs: []});
   return res.status(200).json({meseage: "success", staffs: deletedStaffs})
 }
