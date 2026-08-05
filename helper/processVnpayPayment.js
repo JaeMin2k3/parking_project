@@ -1,6 +1,7 @@
 const model = require('../models/index')
 const vnpay = require('../config/vnpay');
 const sequelize = require('../config/database');
+const { noShowQueue } = require('../config/queue');
 module.exports = async function processVnpayPayment(query) {
   const verify = vnpay.verifyIpnCall(query);
   if (!verify.isSuccess) {
@@ -49,6 +50,18 @@ module.exports = async function processVnpayPayment(query) {
           }
         ),
       ]);
+
+      // MQ: Fetch reservation dateOut to schedule No-Show task
+      const confirmedRes = await model.Reservation.findByPk(payment.reservationId, { transaction: t });
+      if (confirmedRes && confirmedRes.dateOut) {
+          const delayMs = new Date(confirmedRes.dateOut).getTime() - Date.now();
+          if (delayMs > 0) {
+              await noShowQueue.add('noshow-job', { reservationId: payment.reservationId }, { delay: delayMs });
+          } else {
+              await noShowQueue.add('noshow-job', { reservationId: payment.reservationId }, { delay: 1000 }); // execute immediately
+          }
+      }
+
     } else {
       await Promise.all([
         model.Payment.update(

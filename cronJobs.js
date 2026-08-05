@@ -172,7 +172,8 @@ async function joinTwoReservations(t) {
             where: {
                  
                 date: nextBlockDate,        
-                blockIndex: 16, //nextBlockIndex
+                blockIndex: nextBlockIndex, //nextBlockIndex
+                plate: currentRes.plate,
                 status: 'CONFIRMED'           
             },
             transaction: t
@@ -243,15 +244,15 @@ function initCronJobs() {
     cron.schedule('* * * * *', async () => {
         try {
             await sequelize.transaction(async (t) => {
-                const [pendingCount, noShowCount, timeOut, twoResvations] = await Promise.all([
-                    cleanPendingReservations(t),
-                    cleanNoShowReservations(t),
-                    handleTimeOut(),
+                const [twoResvations] = await Promise.all([
+                    // cleanPendingReservations(t),
+                    // cleanNoShowReservations(t),
+                    // handleTimeOut(),
                     joinTwoReservations(t)
                 ]);
 
-                if (pendingCount > 0 || noShowCount > 0 || timeOut > 0 || twoResvations > 0) {
-                    console.log(` Cleaned: ${pendingCount} Pending Timeout | ${noShowCount} No-Show | reservation time out: ${timeOut} || join two reservations: ${twoResvations}` );
+                if (twoResvations > 0) {
+                    console.log(` Joined two reservations: ${twoResvations}` );
                 }else{
                    
                 }

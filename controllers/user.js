@@ -1,4 +1,5 @@
 const model = require("../models/index");
+const { cancelPendingQueue } = require("../config/queue");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { Op, col } = require("sequelize");
@@ -585,6 +586,13 @@ exports.postReservation = async (req, res, next) => {
       plate,
       vehicleType
     );
+    // MQ: Hẹn 15 phút sau để kiểm tra xem thanh toán chưa, nếu chưa thì HỦY
+    await cancelPendingQueue.add(
+        'cancel-job',
+        { reservationId: reservation.id },
+        { delay: 15 * 60 * 1000 } // 15 phút
+    );
+
     await transaction.commit();
     return res.status(200).json({
       message: `Đặt chỗ thành công từ ${startTime} - ${endTime}`,

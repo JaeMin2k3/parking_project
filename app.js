@@ -46,6 +46,7 @@ sequelize.sync()
       console.log('Client connected');
     });
     initCronJobs();
+    require('./workers/queueWorker'); // Khởi tạo MQ Workers
   })
   .catch(err => {
     console.log(err);
